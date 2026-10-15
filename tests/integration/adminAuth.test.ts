@@ -376,11 +376,11 @@ describe.skipIf(!hasTestDatabase)('admin sign-in', () => {
     expect(changed.status).toBe(200);
     expect(changed.body.data.admin.mustChangePassword).toBe(false);
 
-    // Now the address is open (and answers 404 until a later step builds it).
+    // Now the admin pages open.
     const open = await request(app)
       .get(`${api}/initiatives`)
       .set('Authorization', `Bearer ${changed.body.data.accessToken}`);
-    expect(open.status).toBe(404);
+    expect(open.status).toBe(200);
   });
 
   it('refuses sign-in requests from other websites', async () => {

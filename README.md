@@ -7,6 +7,7 @@ Built so far, following the build guide:
 - **Phase 1 (Foundation):** the project skeleton, the app shell with error handling, the database migrations and seeds, the shared building blocks, tests and CI.
 - **Phase 2, Step 5:** admin sign-in with an authenticator app (two-factor authentication), sessions, lockout and password change.
 - **Phase 2, Step 6:** admin user management: super admins add, edit and deactivate admins, and reset a lost authenticator or a forgotten password.
+- **Phase 2, Step 7:** events: the public event list and pages for the app, event types, volunteer tasks, and photo uploads to Azure Blob Storage.
 
 ## Requirements
 
@@ -113,6 +114,59 @@ Security rules built in:
 
 To try it by hand, run `npm run dev` and send the requests above with Thunder Client (a VS Code extension) or Postman. Scan the QR code with Google Authenticator or Microsoft Authenticator. To see the QR code, paste the whole `qrCodeDataUrl` value into a browser's address bar.
 
+## Events (initiatives)
+
+**For the app and website (no sign-in):**
+
+| Request | What it gives |
+| --- | --- |
+| `GET /initiatives?phase=upcoming\|completed\|all&typeId=&page=&pageSize=` | Event cards: Upcoming first (soonest first), then Completed (latest first) |
+| `GET /initiatives/:id` | One event page, with its volunteer `tasks` |
+| `GET /initiatives/:id/tasks` | The task picker on the volunteer form |
+| `GET /initiative-types` | Event types, for filters |
+
+Each event has `initiativeId`, `title`, `typeId`, `typeName`, `summary` (the short text on a card), `description` (the full text), `location`, `startDate`, `endDate`, `startTime`, `endTime`, `imageUrl`, `donationNeeds`, `volunteersRequired`, and three ready-made fields for the screen:
+
+- `dateLabel`: `"24 Oct 2026"`, `"24–25 Oct 2026"` or `"30 Oct – 2 Nov 2026"`
+- `timeLabel`: `"10:00–14:00 SAST"`, `"From 10:00 SAST"`, or `null`
+- `phase`: `"Upcoming"` or `"Completed"`. An event stays Upcoming until its last day has passed in Johannesburg.
+
+Drafts are never public: they don't appear in the list, and their pages answer 404.
+
+**For the admin dashboard (any signed-in admin):**
+
+| Request | What it does |
+| --- | --- |
+| `GET /admin/initiatives?status=Draft\|Published\|Closed\|all&search=&typeId=` | All events, newest first, with `status`, `taskCount` and `applicationCount` |
+| `GET /admin/initiatives/:id` | One event, with its tasks and how many applications each has |
+| `POST /admin/initiatives` | A new event. It always starts as a draft |
+| `PATCH /admin/initiatives/:id` | Change details; send `null` to clear an optional field |
+| `PATCH /admin/initiatives/:id/status` `{ status }` | `Draft` → `Published` → `Closed`, and nothing else |
+| `POST /admin/initiatives/:id/image` | Upload the event photo (see below) |
+| `GET`, `POST /admin/initiatives/:id/tasks`; `PATCH`, `DELETE /admin/initiatives/:id/tasks/:taskId` | Volunteer tasks |
+| `GET`, `POST /admin/initiative-types`; `PATCH /admin/initiative-types/:id` | Event types |
+
+Rules:
+
+- **Publishing** needs a summary, a location, a start date of today or later, and at least one task if volunteers are needed. If something is missing, the reply lists each missing field.
+- **Status** only moves forward. Going back gets a `409` with a plain explanation.
+- **A closed event** is a record of what happened, so it and its tasks can't be changed. Write any recap in the description before closing it.
+- **A task** that already has volunteer applications can't be deleted, but it can be renamed. Task names are unique within an event, and type names are unique, ignoring capitals.
+- **Photos:** send the file as form data in a field called `image`:
+  ```js
+  const form = new FormData();
+  form.append('image', file);
+  await fetch(`${API}/admin/initiatives/${id}/image`, { method: 'POST', body: form, headers: { Authorization: `Bearer ${accessToken}` } });
+  ```
+  JPEG, PNG or WebP only, checked from the file's contents, not its name. The limit is 2 MB. A wrong type gets `415`, a file that's too big gets `413`, and if storage isn't set up the reply is `503`. A new photo replaces the old one, which is deleted.
+
+### Setting up photo storage (Azure)
+
+1. In the Azure portal, **create a storage account**. Use the Standard performance tier and LRS redundancy. On the **Advanced** tab, tick **Allow enabling anonymous access on individual containers**.
+2. In the account, open **Data storage → Containers**, add a container called `images`, and set its **Anonymous access level** to **Blob**. Anyone can then view a photo by its address, but nobody can list the container or change anything in it.
+3. Open **Security + networking → Access keys** and copy **Connection string** (key1).
+4. Put it in `.env` as `AZURE_STORAGE_CONNECTION_STRING="..."` (with the quotes), and in Render's environment variables (without quotes). The connection string is a password: never commit it or share it.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -155,6 +209,10 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 6: a deactivated admin can't sign in, and their open sessions end immediately | `tests/integration/adminUsers.test.ts` |
 | Step 6: the last super admin can't be deactivated, even when two super admins try at the same moment | `tests/integration/adminUsers.test.ts` |
 | Step 6: each change writes an audit log row | `tests/integration/adminUsers.test.ts` |
+| Step 7: drafts never appear in the public list; Upcoming and Completed follow the Johannesburg date | `tests/integration/initiatives.test.ts`, `tests/unit/initiatives.test.ts` |
+| Step 7: moving a closed event back to draft gets a friendly error | `tests/integration/initiatives.test.ts` |
+| Step 7: a renamed non-image file gets 415; a file over 2 MB gets 413 | `tests/integration/initiatives.test.ts`, `tests/unit/initiatives.test.ts` |
+| Step 7: a task with volunteer applications can't be deleted; type names are unique | `tests/integration/initiatives.test.ts` |
 
 To check by hand that the app user cannot drop a table, connect as `lepara_app` and run `DROP TABLE donation;`. It should fail with "must be owner of table donation".
 
@@ -164,7 +222,7 @@ To check by hand that the app user cannot drop a table, connect as `lepara_app` 
 - **Build command:** `npm ci --include=dev && npm run build && npm prune --omit=dev` (TypeScript is a dev dependency, so it must be installed to build)
 - **Start command:** `npm start`
 - **Health check path:** `/api/v1/health`
-- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `TOTP_ENCRYPTION_KEY`. The host sets `PORT`.
+- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`. The host sets `PORT`.
 - **Never change `TOTP_ENCRYPTION_KEY` on the live server** once admins have set up 2FA: their authenticator apps would stop working and each would need 2FA reset.
 
 Run `npm run migrate:up` from your own machine, with `MIGRATION_DATABASE_URL` pointing at the cloud database, before deploying code that needs new tables.
@@ -177,7 +235,9 @@ src/
   app.ts                 middleware order, routes, error handler
   routes.ts              mounts each module under /api/v1
   config/                environment check, database pool and transactions
-  middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles
+  middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles,
+                         photo uploads
+  services/              connections to outside services (photo storage in Azure)
   modules/<feature>/     routes → controller → service → repository (Task 1, Section 6.2)
   schemas/common.ts      shared validation rules with user-facing messages
   utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting,

@@ -53,6 +53,23 @@ const envSchema = z
     TOTP_ENCRYPTION_KEY: z
       .string({ error: 'is required: 64 hex characters (see .env.example)' })
       .regex(/^[0-9a-fA-F]{64}$/, 'must be exactly 64 hex characters (see .env.example)'),
+
+    // Photo uploads (Azure Blob Storage). Optional: without them, uploads answer 503.
+    AZURE_STORAGE_CONNECTION_STRING: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined)
+      .refine(
+        (value) => value === undefined || /AccountName=[^;]+/.test(value),
+        'must be the connection string from the storage account (see .env.example)',
+      ),
+    AZURE_STORAGE_CONTAINER: z
+      .string()
+      .default('images')
+      .refine(
+        (value) => /^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$/.test(value),
+        'must be 3 to 63 lower-case letters, numbers or dashes',
+      ),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.DATABASE_SSL) {

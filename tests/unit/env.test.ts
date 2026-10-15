@@ -60,6 +60,22 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...minimal, TOTP_ENCRYPTION_KEY: 'xyz'.repeat(20) })).toThrow(/64 hex/);
   });
 
+  it('treats photo storage as optional and checks its settings', () => {
+    const plain = loadEnv(minimal);
+    expect(plain.AZURE_STORAGE_CONNECTION_STRING).toBeUndefined();
+    expect(plain.AZURE_STORAGE_CONTAINER).toBe('images');
+    expect(
+      loadEnv({ ...minimal, AZURE_STORAGE_CONNECTION_STRING: '  ' })
+        .AZURE_STORAGE_CONNECTION_STRING,
+    ).toBeUndefined();
+    expect(() =>
+      loadEnv({ ...minimal, AZURE_STORAGE_CONNECTION_STRING: 'not-a-connection-string' }),
+    ).toThrow(/AZURE_STORAGE_CONNECTION_STRING/);
+    expect(() => loadEnv({ ...minimal, AZURE_STORAGE_CONTAINER: 'Images!' })).toThrow(
+      /AZURE_STORAGE_CONTAINER/,
+    );
+  });
+
   it('insists on SSL to the database in production', () => {
     expect(() => loadEnv({ ...minimal, NODE_ENV: 'production' })).toThrow(
       /must be true in production/,

@@ -4,11 +4,22 @@ import { requireRole } from './middleware/requireRole';
 import { adminAuthRouter, adminMeRouter } from './modules/adminAuth/adminAuth.routes';
 import { adminUsersRouter } from './modules/adminUsers/adminUsers.routes';
 import { healthRouter } from './modules/health/health.routes';
+import {
+  adminInitiativeTypesRouter,
+  adminInitiativesRouter,
+  initiativeTypesRouter,
+  initiativesRouter,
+} from './modules/initiatives/initiatives.routes';
 
 /** Everything under /api/v1. Each later step mounts its module here. */
 export const apiRouter = Router();
 
 apiRouter.use('/health', healthRouter);
+
+// --- Public (the app and the website, no sign-in) ------------------------------
+
+apiRouter.use('/initiatives', initiativesRouter);
+apiRouter.use('/initiative-types', initiativeTypesRouter);
 
 // --- Admin (website only) ------------------------------------------------------
 
@@ -22,7 +33,8 @@ adminRouter.use('/me', adminMeRouter);
 // Below this line, a temporary password must have been changed first.
 adminRouter.use(requirePasswordChanged);
 adminRouter.use('/users', requireRole('super_admin'), adminUsersRouter);
-// Later steps add the admin modules here, for example:
-//   adminRouter.use('/initiatives', adminInitiativesRouter);
+adminRouter.use('/initiatives', adminInitiativesRouter);
+adminRouter.use('/initiative-types', adminInitiativeTypesRouter);
+// Later steps add more admin modules here.
 
 apiRouter.use('/admin', adminRouter);
