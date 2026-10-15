@@ -1,0 +1,54 @@
+{
+  "name": "lepara-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Back-end API for the Lepara Ale fele Moya mobile app and website",
+  "license": "MIT",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "migrate:up": "tsx db/migrate.ts up",
+    "migrate:down": "tsx db/migrate.ts down",
+    "migrate:status": "tsx db/migrate.ts status",
+    "seed": "tsx db/seeds/seed.ts",
+    "seed:sample": "tsx db/seeds/seed.ts --sample"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "pg": "^8.16.0",
+    "pino": "^9.7.0",
+    "pino-http": "^10.5.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.0",
+    "@types/pg": "^8.15.4",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^9.30.0",
+    "pino-pretty": "^13.0.0",
+    "prettier": "^3.6.0",
+    "supertest": "^7.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^5.0.4"
+  }
+}

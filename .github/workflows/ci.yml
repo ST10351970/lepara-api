@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lepara
+          POSTGRES_PASSWORD: lepara
+          POSTGRES_DB: lepara_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lepara"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://lepara:lepara@localhost:5432/lepara_test
+      TEST_DATABASE_URL: postgres://lepara:lepara@localhost:5432/lepara_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
