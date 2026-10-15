@@ -2,7 +2,10 @@
 
 The back end for the Lepara Ale fele Moya mobile app and website: Node.js, Express 5, TypeScript and a cloud PostgreSQL database. One API serves both apps; the admin dashboard on the website uses the `/api/v1/admin` routes added in later phases.
 
-This is **Phase 1 (Foundation)** of the build guide: the project skeleton, the app shell with error handling, the database migrations and seeds, the shared building blocks, tests and CI.
+Built so far, following the build guide:
+
+- **Phase 1 (Foundation):** the project skeleton, the app shell with error handling, the database migrations and seeds, the shared building blocks, tests and CI.
+- **Phase 2, Step 5:** admin sign-in with an authenticator app (two-factor authentication), sessions, lockout and password change.
 
 ## Requirements
 
@@ -27,6 +30,7 @@ On Neon: create a project, then under **Databases** add `lepara_dev` and `lepara
 - `MIGRATION_DATABASE_URL` and, for now, `DATABASE_URL`: the `lepara_dev` string.
 - `TEST_DATABASE_URL`: the `lepara_test` string.
 - `SEED_ADMIN_*`: the first admin account for signing in to the API. If the password contains `#`, wrap it in double quotes.
+- `JWT_ADMIN_SECRET` and `TOTP_ENCRYPTION_KEY`: make each one with the command shown above it in `.env.example`, and paste the output. Use different values on your machine and on the live server.
 
 **3. Create the tables**
 
@@ -72,9 +76,45 @@ Open http://localhost:3000/api/v1/health. You should see `"status": "ok"` and `"
 | `npm run migrate:status` | Lists applied and pending migrations |
 | `npm run seed` / `npm run seed:sample` | Adds starting data; safe to run more than once |
 
-## Checking Phase 1
+## Admin sign-in (for the website team)
 
-`npm test` covers the "Done when" checks for steps 1 to 4 of the build guide:
+Admins sign in on the website only. Every admin endpoint is under `/api/v1/admin`.
+
+| Step | Request | Reply (`data`) |
+| --- | --- | --- |
+| 1. Password | `POST /admin/auth/login` `{ username, password }` | `{ nextStep, pendingToken, expiresIn }`. `nextStep` is `two_factor_setup` the first time, `two_factor_verify` after that |
+| 2a. First time: show the QR code | `POST /admin/auth/2fa/setup` `{ pendingToken }` | `{ qrCodeDataUrl, otpauthUrl, manualEntryKey }`. Show `qrCodeDataUrl` as an `<img>`; `manualEntryKey` is for typing in instead |
+| 2a. First time: confirm | `POST /admin/auth/2fa/confirm` `{ pendingToken, code }` | A session (below) plus `backupCodes`: show these 10 codes once and ask the admin to keep them safe |
+| 2b. Later sign-ins | `POST /admin/auth/2fa/verify` `{ pendingToken, code }` | A session. `code` is the 6 digits from the app, or a backup code |
+| Stay signed in | `POST /admin/auth/refresh` (no body) | A new session. Call it when a request fails with `TOKEN_EXPIRED`, and on page load |
+| Sign out | `POST /admin/auth/logout` | `{ signedOut: true }` |
+| Sign out everywhere | `POST /admin/auth/logout-all` (needs the access token) | `{ signedOut: true }` |
+| Who am I | `GET /admin/me` | The admin's profile |
+| Change password | `PATCH /admin/me/password` `{ currentPassword, newPassword, confirmPassword }` | A new session; other devices are signed out |
+
+A **session** is `{ accessToken, tokenType: "Bearer", expiresIn: 900, admin }`. `admin` holds `adminId`, `username`, `fullName`, `email`, `role`, `twoFactorEnabled`, `mustChangePassword`, `lastLoginAt` and `backupCodesRemaining`.
+
+How the website should use it:
+
+- **Keep the access token in memory only** (a variable or React state), not in localStorage. Send it as `Authorization: Bearer <accessToken>`. It lasts 15 minutes.
+- **The refresh token is never in a reply.** The API puts it in an httpOnly cookie that JavaScript cannot read. Call the `/admin/auth/*` endpoints with `fetch(url, { credentials: 'include' })` so the browser sends and stores that cookie.
+- **Refresh one at a time.** If several requests fail with `TOKEN_EXPIRED` together, make one refresh call and let them all wait for it.
+- If `admin.mustChangePassword` is true, show the change-password page first. Other admin endpoints answer `403 PASSWORD_CHANGE_REQUIRED` until the password is changed.
+- Error codes to handle: `UNAUTHORIZED` (go to sign-in), `TOKEN_EXPIRED` (refresh, then retry), `ACCOUNT_LOCKED` (423: show the message), `VALIDATION_ERROR` (show `fields` under the inputs).
+
+Security rules built in:
+
+- Five wrong passwords **or codes** in a row lock the account for 15 minutes.
+- Each authenticator code works once. Each backup code works once.
+- Authenticator secrets are stored encrypted (AES-256-GCM); backup codes and refresh tokens are stored only as hashes.
+- Sessions last at most 12 hours. The refresh token is replaced every time it is used. If an old one is used again, someone has copied it, so the API signs that admin out on every device.
+- Sign-in endpoints refuse browser requests from websites not listed in `CORS_ORIGINS`.
+
+To try it by hand, run `npm run dev` and send the requests above with Thunder Client (a VS Code extension) or Postman. Scan the QR code with Google Authenticator or Microsoft Authenticator. To see the QR code, paste the whole `qrCodeDataUrl` value into a browser's address bar.
+
+## Checking each step
+
+`npm test` covers the "Done when" checks in the build guide:
 
 | Check | Where it is tested |
 | --- | --- |
@@ -86,6 +126,11 @@ Open http://localhost:3000/api/v1/health. You should see `"status": "ok"` and `"
 | Validation rules for names, emails, phone numbers, passwords, money, dates | `tests/unit/schemas.test.ts`, `tests/integration/requestHandling.test.ts` |
 | Reference numbers never use 0, O, 1 or I and retry on a clash | `tests/unit/referenceNumber.test.ts` |
 | Errors never expose stack traces; rate limits return 429 | `tests/integration/requestHandling.test.ts` |
+| Step 5: set up 2FA with an authenticator app, then sign in; a wrong code is refused; a backup code works once | `tests/integration/adminAuth.test.ts` |
+| Step 5: the 5th wrong password locks the account (423), and the right password is refused while locked | `tests/integration/adminAuth.test.ts` |
+| Step 5: reusing an old refresh token signs out everywhere; admin routes without a token give 401 | `tests/integration/adminAuth.test.ts` |
+| Step 5: authenticator codes match the official RFC 6238 test values; tokens can't be forged or swapped | `tests/unit/totp.test.ts`, `tests/unit/adminTokens.test.ts` |
+| Step 5: no password, code or token appears in the logs | `tests/unit/logger.test.ts` |
 
 To check by hand that the app user cannot drop a table, connect as `lepara_app` and run `DROP TABLE donation;`. It should fail with "must be owner of table donation".
 
@@ -95,7 +140,8 @@ To check by hand that the app user cannot drop a table, connect as `lepara_app` 
 - **Build command:** `npm ci --include=dev && npm run build && npm prune --omit=dev` (TypeScript is a dev dependency, so it must be installed to build)
 - **Start command:** `npm start`
 - **Health check path:** `/api/v1/health`
-- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`. The host sets `PORT`.
+- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `TOTP_ENCRYPTION_KEY`. The host sets `PORT`.
+- **Never change `TOTP_ENCRYPTION_KEY` on the live server** once admins have set up 2FA: their authenticator apps would stop working and each would need 2FA reset.
 
 Run `npm run migrate:up` from your own machine, with `MIGRATION_DATABASE_URL` pointing at the cloud database, before deploying code that needs new tables.
 
@@ -107,10 +153,11 @@ src/
   app.ts                 middleware order, routes, error handler
   routes.ts              mounts each module under /api/v1
   config/                environment check, database pool and transactions
-  middleware/            validation, error handler, not-found, rate limits
+  middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles
   modules/<feature>/     routes → controller → service → repository (Task 1, Section 6.2)
   schemas/common.ts      shared validation rules with user-facing messages
-  utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting
+  utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting,
+                         authenticator codes (totp.ts), encryption and hashing (crypto.ts), audit log
 db/
   migrations/            numbered SQL files, each with an up and a down section
   seeds/                 reference and sample data
@@ -144,3 +191,4 @@ Migration `001` creates the ten Task 1 tables exactly as Section 8 designs them.
 | 002 | New `REFRESH_TOKEN`, `DEVICE_TOKEN`, `AUDIT_LOG` | Sessions, push notifications, who changed what |
 | 003 | Customer accounts and shop: `CUSTOMER`, `VERIFICATION_CODE`, `PRODUCT_CATEGORY`, `PRODUCT`, `PRODUCT_VARIANT`, `CUSTOMER_ORDER`, `ORDER_ITEM`, `ORDER_STATUS_HISTORY`, `PAYMENT`, `IDEMPOTENCY_KEY` | The app's Account, Shop and Checkout screens |
 | 004 | One pending volunteer application per phone number per initiative | Stops duplicate applications |
+| 005 | `ADMIN_USER`: session version, last authenticator code used; `REFRESH_TOKEN`: revoke reason | Ending all sessions at once, codes that work only once, detecting a copied refresh token |

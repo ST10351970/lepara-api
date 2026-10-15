@@ -45,6 +45,14 @@ const envSchema = z
           .filter(Boolean),
       ),
     TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
+
+    // Admin sign-in. See .env.example for how to make each value.
+    JWT_ADMIN_SECRET: z
+      .string({ error: 'is required: a long random value (see .env.example)' })
+      .min(32, 'must be at least 32 characters (see .env.example)'),
+    TOTP_ENCRYPTION_KEY: z
+      .string({ error: 'is required: 64 hex characters (see .env.example)' })
+      .regex(/^[0-9a-fA-F]{64}$/, 'must be exactly 64 hex characters (see .env.example)'),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.DATABASE_SSL) {

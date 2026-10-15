@@ -1,4 +1,4 @@
-import { Client } from 'pg';
+import { Client, type QueryResultRow } from 'pg';
 import { scriptConnectionConfig } from '../../db/connection';
 
 /**
@@ -16,7 +16,19 @@ function testClient(): Promise<Client> {
   return shared;
 }
 
-/** Call from afterAll in any test file that uses withRollback. */
+/**
+ * Runs one query that is kept (not rolled back). For tests where the API
+ * itself must see the rows, such as signing in; clean up in afterAll.
+ */
+export async function testQuery<Row extends QueryResultRow = QueryResultRow>(
+  text: string,
+  values: unknown[] = [],
+): Promise<Row[]> {
+  const client = await testClient();
+  return (await client.query<Row>(text, values)).rows;
+}
+
+/** Call from afterAll in any test file that uses withRollback or testQuery. */
 export async function closeTestClient(): Promise<void> {
   if (!shared) return;
   const client = await shared.catch(() => undefined);

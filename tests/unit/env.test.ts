@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { EnvError, loadEnv } from '../../src/config/env';
 
-const minimal = { DATABASE_URL: 'postgres://user:pass@localhost:5432/lepara_dev' };
+const minimal = {
+  DATABASE_URL: 'postgres://user:pass@localhost:5432/lepara_dev',
+  JWT_ADMIN_SECRET: 'a'.repeat(32),
+  TOTP_ENCRYPTION_KEY: 'ab'.repeat(32),
+};
 
 describe('loadEnv', () => {
   it('fills in safe defaults', () => {
@@ -41,6 +45,19 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ DATABASE_URL: 'mysql://x' })).toThrow(/postgres/);
     expect(() => loadEnv({ ...minimal, PORT: 'eighty' })).toThrow(/PORT/);
     expect(() => loadEnv({ ...minimal, DATABASE_SSL: 'yes' })).toThrow(/DATABASE_SSL/);
+  });
+
+  it('needs the admin sign-in secrets, and checks their shape', () => {
+    try {
+      loadEnv({ DATABASE_URL: minimal.DATABASE_URL });
+      throw new Error('Expected loadEnv to fail');
+    } catch (error) {
+      const problems = (error as EnvError).problems.join(' ');
+      expect(problems).toContain('JWT_ADMIN_SECRET');
+      expect(problems).toContain('TOTP_ENCRYPTION_KEY');
+    }
+    expect(() => loadEnv({ ...minimal, JWT_ADMIN_SECRET: 'short' })).toThrow(/at least 32/);
+    expect(() => loadEnv({ ...minimal, TOTP_ENCRYPTION_KEY: 'xyz'.repeat(20) })).toThrow(/64 hex/);
   });
 
   it('insists on SSL to the database in production', () => {

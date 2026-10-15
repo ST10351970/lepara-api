@@ -10,7 +10,11 @@ export const ErrorCode = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   INVALID_JSON: 'INVALID_JSON',
   UNAUTHORIZED: 'UNAUTHORIZED',
+  /** The access token is out of date: the website should refresh it and try again. */
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
   FORBIDDEN: 'FORBIDDEN',
+  /** The admin must replace a temporary password before doing anything else. */
+  PASSWORD_CHANGE_REQUIRED: 'PASSWORD_CHANGE_REQUIRED',
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',

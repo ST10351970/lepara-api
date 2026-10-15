@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -9,6 +10,7 @@ import { notFound } from './middleware/notFound';
 import { limiters } from './middleware/rateLimiters';
 import { apiRouter } from './routes';
 import { logger } from './utils/logger';
+import { ok } from './utils/respond';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
 
@@ -65,16 +67,25 @@ export function createApp() {
     }),
   );
 
-  // 4. JSON bodies, at most 100 KB.
+  // 4. JSON bodies, at most 100 KB, and cookies (only the admin sign-in cookie is used).
   app.use(express.json({ limit: '100kb' }));
+  app.use(cookieParser());
 
   // 5. A ceiling on requests per IP.
   app.use(limiters.global);
 
-  // 6. The API itself.
+  // 6. A friendly reply at the bare address, so opening it in a browser isn't an error.
+  app.get('/', (_req, res) => {
+    ok(res, { name: 'Lepara Ale fele Moya API', version: 'v1', health: '/api/v1/health' });
+  });
+  app.get('/favicon.ico', (_req, res) => {
+    res.status(204).end();
+  });
+
+  // 7. The API itself.
   app.use('/api/v1', apiRouter);
 
-  // 7. Unknown paths, then the one error handler.
+  // 8. Unknown paths, then the one error handler.
   app.use(notFound);
   app.use(errorHandler);
 

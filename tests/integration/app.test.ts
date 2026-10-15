@@ -11,6 +11,16 @@ vi.mock('../../src/modules/health/health.repository', () => ({
 const app = createApp();
 
 describe('the app shell', () => {
+  it('answers the bare address with the API name instead of an error', async () => {
+    const res = await request(app).get('/');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: true,
+      data: { name: 'Lepara Ale fele Moya API', health: '/api/v1/health' },
+    });
+    expect((await request(app).get('/favicon.ico')).status).toBe(204);
+  });
+
   it('answers an unknown path with a 404 envelope and a request ID', async () => {
     const res = await request(app).get('/api/v1/does-not-exist');
     expect(res.status).toBe(404);
