@@ -215,7 +215,9 @@ export type RevokeReason =
   | 'signed_out_everywhere'
   | 'password_changed'
   | 'reuse_detected'
-  | 'account_deactivated';
+  | 'account_deactivated'
+  | 'two_factor_reset'
+  | 'password_reset';
 
 /**
  * Saves a refresh token's hash. A new session lasts `hoursValid` hours; a

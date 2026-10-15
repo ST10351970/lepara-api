@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import bcrypt from 'bcryptjs';
 import QRCode from 'qrcode';
 import { type Queryable, withTransaction } from '../../config/db';
 import { AppError, errors } from '../../utils/AppError';
 import { recordAudit } from '../../utils/audit';
 import { decryptSecret, encryptSecret } from '../../utils/crypto';
+import { hashPassword, verifyPassword } from '../../utils/passwords';
 import {
   formatSecretForTyping,
   generateTotpSecret,
@@ -51,7 +51,6 @@ export const LOCK_MINUTES = 15;
 /** A refresh token replaced less than this long ago is a second tab, not a thief. */
 export const ROTATION_GRACE_SECONDS = 10;
 const TOTP_ISSUER = 'Lepara Ale fele Moya';
-const BCRYPT_COST = 12;
 
 export type RequestContext = { userAgent: string | null };
 
@@ -131,19 +130,19 @@ async function failedAttempt(admin: AdminAuthRow, error: AppError): Promise<AppE
 // A real bcrypt hash to compare against when the username doesn't exist, so a
 // wrong username takes as long as a wrong password and gives nothing away.
 let dummyHash: Promise<string> | undefined;
-const timingDummy = () => (dummyHash ??= bcrypt.hash('not-a-real-password', BCRYPT_COST));
+const timingDummy = () => (dummyHash ??= hashPassword('not-a-real-password'));
 
 // --- Step 1: password ----------------------------------------------------------
 
 export async function signIn({ username, password }: LoginInput): Promise<SignInStep> {
   const admin = await repo.findAdminByUsername(username);
   if (!admin || !admin.is_active) {
-    await bcrypt.compare(password, await timingDummy());
+    await verifyPassword(password, await timingDummy());
     throw wrongCredentials();
   }
   assertNotLocked(admin);
 
-  if (!(await bcrypt.compare(password, admin.password_hash))) {
+  if (!(await verifyPassword(password, admin.password_hash))) {
     throw await failedAttempt(admin, wrongCredentials());
   }
 
@@ -423,7 +422,7 @@ export async function changePassword(
   const admin = await repo.findAdminById(adminId);
   if (!admin) throw errors.unauthorized();
 
-  if (!(await bcrypt.compare(currentPassword, admin.password_hash))) {
+  if (!(await verifyPassword(currentPassword, admin.password_hash))) {
     throw errors.validation([
       { field: 'currentPassword', message: 'Your current password is incorrect.' },
     ]);
@@ -437,7 +436,7 @@ export async function changePassword(
     ]);
   }
 
-  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+  const passwordHash = await hashPassword(newPassword);
   return withTransaction(async (client) => {
     await repo.updatePassword(client, adminId, passwordHash);
     const updated = await repo.endAllSessions(client, adminId, 'password_changed');

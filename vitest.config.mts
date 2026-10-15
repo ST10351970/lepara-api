@@ -8,7 +8,7 @@ export default defineConfig({
     // Database tests share one test database, so test files run one at a time.
     fileParallelism: false,
     // Generous limits: the test database is in the cloud, so each query crosses the internet.
-    testTimeout: 30_000,
+    testTimeout: 60_000,
     hookTimeout: 180_000,
   },
 });

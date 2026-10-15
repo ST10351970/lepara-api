@@ -17,3 +17,12 @@ export function pickSort<Key extends string>(
   }
   return allowed[fallback];
 }
+
+/**
+ * A search term for ILIKE that matches the text anywhere, with % and _ in
+ * the user's text treated as ordinary characters. Pass it as a $ value:
+ *   WHERE full_name ILIKE $1      values: [likeContains(search)]
+ */
+export function likeContains(text: string): string {
+  return `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+}

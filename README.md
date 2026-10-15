@@ -6,6 +6,7 @@ Built so far, following the build guide:
 
 - **Phase 1 (Foundation):** the project skeleton, the app shell with error handling, the database migrations and seeds, the shared building blocks, tests and CI.
 - **Phase 2, Step 5:** admin sign-in with an authenticator app (two-factor authentication), sessions, lockout and password change.
+- **Phase 2, Step 6:** admin user management: super admins add, edit and deactivate admins, and reset a lost authenticator or a forgotten password.
 
 ## Requirements
 
@@ -112,6 +113,25 @@ Security rules built in:
 
 To try it by hand, run `npm run dev` and send the requests above with Thunder Client (a VS Code extension) or Postman. Scan the QR code with Google Authenticator or Microsoft Authenticator. To see the QR code, paste the whole `qrCodeDataUrl` value into a browser's address bar.
 
+## Managing admins (super admins only)
+
+Staff admins get `403 FORBIDDEN` on all of these.
+
+| Request | What it does |
+| --- | --- |
+| `GET /admin/users?status=active\|inactive\|all&search=&page=&pageSize=` | Lists admins, active ones first. `search` looks in the username, name and email |
+| `GET /admin/users/:id` | One admin |
+| `POST /admin/users` `{ username, fullName, email, role }` | Adds an admin (`role` is `staff` unless set to `super_admin`). Replies with `{ admin, temporaryPassword }` |
+| `PATCH /admin/users/:id` `{ fullName?, email?, role?, isActive? }` | Changes details, role or status. `isActive: false` deactivates the admin and ends their sessions at once |
+| `POST /admin/users/:id/reset-2fa` | For a lost phone: removes their authenticator app and backup codes, and signs them out. Their next sign-in sets up 2FA again |
+| `POST /admin/users/:id/reset-password` | For a forgotten password: replies with `{ admin, temporaryPassword }` and signs them out |
+
+Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `isActive`, `twoFactorEnabled`, `mustChangePassword`, `lockedUntil` (set while locked after wrong attempts), `lastLoginAt` and `createdAt`.
+
+- **Temporary passwords are shown once.** The website should display the password with a copy button and a note to pass it on privately. The API never shows it again. At first sign-in the new admin sets up their authenticator app, then must choose their own password.
+- **Rules:** usernames and emails must be unique, and usernames can't be changed later. Nobody can deactivate themselves or change their own role. There is always at least one active super admin; a request that would remove the last one gets `409`.
+- **Audit log:** every change writes a row to `audit_log` saying which super admin did what to which admin.
+
 ## Checking each step
 
 `npm test` covers the "Done when" checks in the build guide:
@@ -131,6 +151,10 @@ To try it by hand, run `npm run dev` and send the requests above with Thunder Cl
 | Step 5: reusing an old refresh token signs out everywhere; admin routes without a token give 401 | `tests/integration/adminAuth.test.ts` |
 | Step 5: authenticator codes match the official RFC 6238 test values; tokens can't be forged or swapped | `tests/unit/totp.test.ts`, `tests/unit/adminTokens.test.ts` |
 | Step 5: no password, code or token appears in the logs | `tests/unit/logger.test.ts` |
+| Step 6: a staff admin gets 403 on `/admin/users`; a new admin must set up 2FA and change the temporary password | `tests/integration/adminUsers.test.ts` |
+| Step 6: a deactivated admin can't sign in, and their open sessions end immediately | `tests/integration/adminUsers.test.ts` |
+| Step 6: the last super admin can't be deactivated, even when two super admins try at the same moment | `tests/integration/adminUsers.test.ts` |
+| Step 6: each change writes an audit log row | `tests/integration/adminUsers.test.ts` |
 
 To check by hand that the app user cannot drop a table, connect as `lepara_app` and run `DROP TABLE donation;`. It should fail with "must be owner of table donation".
 
@@ -192,3 +216,4 @@ Migration `001` creates the ten Task 1 tables exactly as Section 8 designs them.
 | 003 | Customer accounts and shop: `CUSTOMER`, `VERIFICATION_CODE`, `PRODUCT_CATEGORY`, `PRODUCT`, `PRODUCT_VARIANT`, `CUSTOMER_ORDER`, `ORDER_ITEM`, `ORDER_STATUS_HISTORY`, `PAYMENT`, `IDEMPOTENCY_KEY` | The app's Account, Shop and Checkout screens |
 | 004 | One pending volunteer application per phone number per initiative | Stops duplicate applications |
 | 005 | `ADMIN_USER`: session version, last authenticator code used; `REFRESH_TOKEN`: revoke reason | Ending all sessions at once, codes that work only once, detecting a copied refresh token |
+| 006 | `ADMIN_USER`: one account per email address; two more revoke reasons (2FA reset, password reset) | Admin management |
