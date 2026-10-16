@@ -27,6 +27,43 @@ const optionalText = z
   .optional()
   .transform((value) => value?.trim() || undefined);
 
+export type FirebaseServiceAccount = {
+  projectId: string;
+  clientEmail: string;
+  privateKey: string;
+};
+
+/**
+ * The Firebase service account key file (JSON), pasted as it is or in base64.
+ * Returns null if it isn't one. Only the three fields the API needs are kept.
+ */
+export function parseServiceAccount(text: string): FirebaseServiceAccount | null {
+  const raw = text.trim();
+  const json = raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const { project_id, client_email, private_key } = parsed as Record<string, unknown>;
+  if (
+    typeof project_id !== 'string' ||
+    typeof client_email !== 'string' ||
+    typeof private_key !== 'string' ||
+    !private_key.includes('PRIVATE KEY')
+  ) {
+    return null;
+  }
+  // A key copied with its line breaks written out as \n still works.
+  return {
+    projectId: project_id,
+    clientEmail: client_email,
+    privateKey: private_key.replace(/\\n/g, '\n'),
+  };
+}
+
 const MAIL_FROM_PATTERN =
   /^([^<>@]*<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>|[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)$/;
 
@@ -134,6 +171,22 @@ const envSchema = z
       (value) => value === undefined || /^\d[\d ]{4,24}$/.test(value),
       'must be the account number (digits only)',
     ),
+    // Push notifications (Firebase Cloud Messaging). Optional: without it, devices are
+    // still registered and each notification is skipped with a line in the log.
+    FIREBASE_SERVICE_ACCOUNT: optionalText.transform((value, ctx) => {
+      if (value === undefined) return undefined;
+      const account = parseServiceAccount(value);
+      if (!account) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'must be the contents of the Firebase service account key file, or the same in ' +
+            'base64 (see .env.example)',
+        });
+        return z.NEVER;
+      }
+      return account;
+    }),
     EFT_BRANCH_CODE: optionalText.refine(
       (value) => value === undefined || /^\d{6}$/.test(value),
       'must be the 6-digit branch code',

@@ -109,7 +109,7 @@ export async function getAdminAnnouncement(announcementId: number): Promise<Admi
   return toAdmin(row);
 }
 
-/** Publishes a new announcement, then tells the app (push notifications arrive in step 17). */
+/** Publishes a new announcement, then sends it to every device as a push notification. */
 export async function createAnnouncement(
   adminId: number,
   input: CreateAnnouncementInput,
@@ -120,7 +120,11 @@ export async function createAnnouncement(
     return (await repo.findAnnouncement(announcementId, client))!;
   });
   try {
-    await announcementPublished({ announcementId: row.announcement_id, title: row.title });
+    await announcementPublished({
+      announcementId: row.announcement_id,
+      title: row.title,
+      body: row.body,
+    });
   } catch (error) {
     // The announcement is saved either way; a failed notification must not undo it.
     logger.warn({ err: error }, 'Could not send the announcement notification');

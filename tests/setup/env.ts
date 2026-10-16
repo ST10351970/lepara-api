@@ -20,6 +20,9 @@ for (const key of ['EFT_BANK_NAME', 'EFT_ACCOUNT_NAME', 'EFT_ACCOUNT_NUMBER', 'E
   process.env[key] = '';
 }
 
+// Push notifications are off in tests; a test file can set a pretend sender.
+process.env.FIREBASE_SERVICE_ACCOUNT = '';
+
 // Tests always talk to the test database, never the development one.
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://not:configured@127.0.0.1:1/not_configured_test';

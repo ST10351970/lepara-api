@@ -2,6 +2,7 @@ import { createApp } from './app';
 import { closePool } from './config/db';
 import { env } from './config/env';
 import { waitForPendingEmails } from './services/email';
+import { waitForPendingNotifications } from './services/notifications';
 import { logger } from './utils/logger';
 
 const app = createApp();
@@ -17,8 +18,8 @@ const server = app.listen(env.PORT, (error?: Error) => {
 let shuttingDown = false;
 
 /**
- * Stops taking new requests, lets open ones and emails still being sent
- * finish, then closes the database pool.
+ * Stops taking new requests, lets open ones and emails and push notifications
+ * still being sent finish, then closes the database pool.
  */
 function shutdown(reason: string, exitCode: number): void {
   if (shuttingDown) return;
@@ -32,7 +33,7 @@ function shutdown(reason: string, exitCode: number): void {
   forceExit.unref();
 
   server.close(() => {
-    waitForPendingEmails()
+    Promise.all([waitForPendingEmails(), waitForPendingNotifications()])
       .then(() => closePool())
       .catch((error: unknown) => logger.error({ err: error }, 'Could not close the database pool'))
       .finally(() => process.exit(exitCode));

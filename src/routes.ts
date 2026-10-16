@@ -12,6 +12,7 @@ import {
   adminDonationsRouter,
   adminPledgeReceiptRouter,
 } from './modules/donations/donations.routes';
+import { devicesRouter } from './modules/devices/devices.routes';
 import { healthRouter } from './modules/health/health.routes';
 import {
   adminInitiativeTypesRouter,
@@ -73,6 +74,9 @@ apiRouter.use('/enquiries', enquiriesRouter);
 
 // Track my request: reference number + last 4 phone digits (5 wrong tries per 15 minutes).
 apiRouter.use('/track', trackingRouter);
+
+// Push notification tokens: the app registers its phone on every start.
+apiRouter.use('/devices', devicesRouter);
 
 // --- Customers (the app's Account tab and the shop) ------------------------------
 

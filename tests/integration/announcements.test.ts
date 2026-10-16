@@ -73,6 +73,7 @@ describe.skipIf(!hasTestDatabase)('announcements', () => {
     expect(announcementPublished).toHaveBeenCalledWith({
       announcementId: second,
       title: 'Thank you, volunteers',
+      body: 'Details for the community, written by the team.',
     });
 
     const item = await admin.get(`/announcements/${second}`);

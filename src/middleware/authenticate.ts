@@ -103,3 +103,22 @@ export function currentCustomer(res: Response): CustomerPrincipal {
   if (!customer) throw errors.unauthorized();
   return customer;
 }
+
+/**
+ * For routes that work signed in or not (registering a phone for notifications):
+ * no Authorization header means a guest; a header must hold a valid customer token,
+ * so an expired one gets TOKEN_EXPIRED and the app refreshes first.
+ */
+export const optionalCustomer: RequestHandler = async (req, res, next) => {
+  if (req.headers.authorization === undefined) {
+    next();
+    return;
+  }
+  await authenticateCustomer(req, res, next);
+};
+
+/** The signed-in customer's ID, or null for a guest. */
+export function customerIdOrNull(res: Response): number | null {
+  const customer = res.locals.customer as CustomerPrincipal | undefined;
+  return customer?.customerId ?? null;
+}

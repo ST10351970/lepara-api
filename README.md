@@ -185,7 +185,7 @@ Rules:
 | `PATCH /admin/announcements/:id` `{ title?, body? }` | Corrects it; the publishing date stays the same |
 | `PATCH /admin/announcements/:id/active` `{ isActive }` | Hides it from the app (`false`) or shows it again (`true`) |
 
-Each announcement has `announcementId`, `title`, `body`, `publishedAt` and `dateLabel`, the publishing date in Johannesburg written like `"16 Oct 2026"`. The admin replies also have `isActive` and `publishedBy`. Titles are 5 to 120 characters and the text is 10 to 2,000. Publishing will also send a push notification once step 17 is built.
+Each announcement has `announcementId`, `title`, `body`, `publishedAt` and `dateLabel`, the publishing date in Johannesburg written like `"16 Oct 2026"`. The admin replies also have `isActive` and `publishedBy`. Titles are 5 to 120 characters and the text is 10 to 2,000. Publishing a new announcement also sends it as a push notification to every registered phone (see "Push notifications" below).
 
 ## Shop (products)
 
@@ -444,7 +444,45 @@ How an order moves:
 - **An EFT order** stays Pending payment until its payment is recorded. `amount` is in rands (`310` or `"310.00"`) and must equal the order total, otherwise `400` on `amount`. `reference` is the reference on the bank statement; left empty, it is the order number. Recording the payment confirms the order.
 - **Cash on delivery** can be packed straight away. Record the cash once it is collected (usually after delivery). This doesn't change the status.
 - **Cancelling** (`status: "Cancelled"`) needs a `reason`, which the customer receives in the email and sees in the app. It's allowed until the order is shipped, and the stock goes back. A paid order is only cancelled with `refunded: true`, once the money has been paid back to the customer.
-- **Every change** adds a status history row (when the status changes), an audit log row and an email to the customer. Push notifications follow in step 17. Two admins changing the same order at the same moment: the first wins, the second gets `409`.
+- **Every change** adds a status history row (when the status changes), an audit log row, an email to the customer and a push notification to the phones where the customer is signed in. Two admins changing the same order at the same moment: the first wins, the second gets `409`.
+
+## Push notifications
+
+The app registers its phone, and the API sends through Firebase Cloud Messaging (FCM):
+
+| Request | Sign-in | Body | Reply (`data`) |
+| --- | --- | --- | --- |
+| `POST /devices` | Optional (customer) | `{ token, platform }` | `{ registered: true, linkedToAccount }` |
+| `DELETE /devices/:token` | No | | `{ removed }` (notifications switched off on this phone) |
+
+What gets sent:
+
+- **A new announcement** goes to every registered phone: the title "News: …" and the first 150 characters of the text, with `data: { type: "announcement", announcementId }` so the app can open it.
+- **An order update** from the dashboard (payment received, packed, on the way, delivered, cancelled) goes to the phones where that customer is signed in, with `data: { type: "order", orderNumber, status }`.
+- **Tokens FCM rejects** (the app was uninstalled) are deleted after each send, and phones not seen for 270 days are dropped.
+- **Sending happens after the reply**, in the background: a slow or unreachable Firebase never delays or undoes the admin's change; the failure is logged.
+
+For the mobile team:
+
+- **The token** is the native one from `expo-notifications`: `(await Notifications.getDevicePushTokenAsync()).data`, not `getExpoPushTokenAsync()` (Expo push tokens only work with Expo's own service; the API refuses them with a clear message). `platform` is `"android"` or `"ios"`.
+- **Register on every app start**, after asking for permission, and again after signing in or out. Signed in (send `Authorization: Bearer <accessToken>`), the phone is linked to the customer for order updates; without a sign-in the link is removed, so a signed-out phone gets news only. Call `DELETE /devices/<token>` when the user switches notifications off.
+- **Expo Go can't receive FCM messages:** use a development build (`npx expo run:android` or EAS) with `google-services.json` from the Firebase project, and set `android.package` in `app.json` to the package name registered in Firebase.
+- **iPhones** need an Apple developer account and an FCM token (from `@react-native-firebase/messaging`) instead of the native APNs token, so for this project push notifications are tested on Android.
+
+### Setting up Firebase
+
+Push notifications stay off (and everything else works) until this is done. One Firebase project is shared by the app and the API.
+
+1. At [console.firebase.google.com](https://console.firebase.google.com), choose **Create a project** (Google Analytics isn't needed).
+2. **Add an Android app** with the package name the mobile team sets in `app.json` (`android.package`, for example `com.leparaalefelemoya.app`). Give the downloaded `google-services.json` to the mobile team.
+3. **Project settings → Service accounts → Generate new private key.** This downloads a JSON key file. It is a password for the project: never commit it, never paste it in a chat, and don't leave it in the project folder.
+4. Turn it into one line of base64 in PowerShell, which copies it straight to the clipboard:
+   ```powershell
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\<key file>.json")) | Set-Clipboard
+   ```
+5. On Render, add `FIREBASE_SERVICE_ACCOUNT` and paste. After the redeploy, the first notification logs "Push notifications are sent through Firebase". Then delete the key file from Downloads (Firebase can always make a new one, and old keys can be deleted there).
+
+To try it on your own machine, put the same value in `.env` as `FIREBASE_SERVICE_ACCOUNT=...`. Without it, `npm run dev` logs "Push notifications are off".
 
 ## Managing admins (super admins only)
 
@@ -515,6 +553,9 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 16: skipping a status (Confirmed straight to Delivered) gets 409; Shipped without a courier reference gets 400 | `tests/integration/adminOrders.test.ts`, `tests/unit/adminOrders.test.ts` |
 | Step 16: the customer's Orders tab shows each step with its time; marking an EFT order paid with the wrong amount gets 400 | `tests/integration/adminOrders.test.ts` |
 | Step 16: an admin cancellation needs a reason and puts the stock back; every change writes an audit row | `tests/integration/adminOrders.test.ts` |
+| Step 17: publishing an announcement reaches the phones; an order status change reaches only that customer's phones (with a pretend Firebase) | `tests/integration/devices.test.ts` |
+| Step 17: an invalid token is removed after a send; with Firebase unreachable, the announcement still publishes | `tests/integration/devices.test.ts`, `tests/unit/push.test.ts` |
+| Step 17: sends go 500 phones at a time; a failed batch doesn't stop the rest | `tests/unit/push.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
@@ -526,7 +567,7 @@ To check by hand that the app user cannot drop a table, connect as `lepara_app` 
 - **Build command:** `npm ci --include=dev && npm run build && npm prune --omit=dev` (TypeScript is a dev dependency, so it must be installed to build)
 - **Start command:** `npm start`
 - **Health check path:** `/api/v1/health`
-- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `JWT_CUSTOMER_SECRET` (a different value), `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`, for email `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan SMTP is blocked, so use Brevo's API there), and for the shop the four `EFT_` bank settings (`DELIVERY_FEE_CENTS` only if it isn't R60). The host sets `PORT`.
+- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `JWT_CUSTOMER_SECRET` (a different value), `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`, for email `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan SMTP is blocked, so use Brevo's API there), for the shop the four `EFT_` bank settings (`DELIVERY_FEE_CENTS` only if it isn't R60), and `FIREBASE_SERVICE_ACCOUNT` for push notifications. The host sets `PORT`.
 - **Never change `TOTP_ENCRYPTION_KEY` on the live server** once admins have set up 2FA: their authenticator apps would stop working and each would need 2FA reset.
 
 Run `npm run migrate:up` from your own machine, with `MIGRATION_DATABASE_URL` pointing at the cloud database, before deploying code that needs new tables.
@@ -542,7 +583,7 @@ src/
   middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles,
                          photo uploads, the forms' spam trap, Idempotency-Key for orders
   services/              connections to outside services (photo storage in Azure, email and its templates;
-                         push notifications from step 17)
+                         push notifications through Firebase)
   modules/<feature>/     routes → controller → service → repository (Task 1, Section 6.2)
   schemas/common.ts      shared validation rules with user-facing messages
   utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting,
