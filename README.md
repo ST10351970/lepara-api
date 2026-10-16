@@ -8,6 +8,7 @@ Built so far, following the build guide:
 - **Phase 2, Step 5:** admin sign-in with an authenticator app (two-factor authentication), sessions, lockout and password change.
 - **Phase 2, Step 6:** admin user management: super admins add, edit and deactivate admins, and reset a lost authenticator or a forgotten password.
 - **Phase 2, Step 7:** events: the public event list and pages for the app, event types, volunteer tasks, and photo uploads to Azure Blob Storage.
+- **Phase 2, Step 8:** announcements for the app's News screen.
 
 ## Requirements
 
@@ -167,6 +168,19 @@ Rules:
 3. Open **Security + networking → Access keys** and copy **Connection string** (key1).
 4. Put it in `.env` as `AZURE_STORAGE_CONNECTION_STRING="..."` (with the quotes), and in Render's environment variables (without quotes). The connection string is a password: never commit it or share it.
 
+## News (announcements)
+
+| Request | What it does |
+| --- | --- |
+| `GET /announcements?page=&pageSize=` | The News screen: shown announcements only, newest first (no sign-in) |
+| `GET /admin/announcements?status=active\|inactive\|all&search=` | All announcements, newest first |
+| `GET /admin/announcements/:id` | One announcement |
+| `POST /admin/announcements` `{ title, body }` | Publishes straight away (Task 1 has no drafts for announcements) |
+| `PATCH /admin/announcements/:id` `{ title?, body? }` | Corrects it; the publishing date stays the same |
+| `PATCH /admin/announcements/:id/active` `{ isActive }` | Hides it from the app (`false`) or shows it again (`true`) |
+
+Each announcement has `announcementId`, `title`, `body`, `publishedAt` and `dateLabel`, the publishing date in Johannesburg written like `"16 Oct 2026"`. The admin replies also have `isActive` and `publishedBy`. Titles are 5 to 120 characters and the text is 10 to 2,000. Publishing will also send a push notification once step 17 is built.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -213,6 +227,7 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 7: moving a closed event back to draft gets a friendly error | `tests/integration/initiatives.test.ts` |
 | Step 7: a renamed non-image file gets 415; a file over 2 MB gets 413 | `tests/integration/initiatives.test.ts`, `tests/unit/initiatives.test.ts` |
 | Step 7: a task with volunteer applications can't be deleted; type names are unique | `tests/integration/initiatives.test.ts` |
+| Step 8: hidden announcements never appear publicly; the public list is newest first and paginated | `tests/integration/announcements.test.ts` |
 
 To check by hand that the app user cannot drop a table, connect as `lepara_app` and run `DROP TABLE donation;`. It should fail with "must be owner of table donation".
 
@@ -237,7 +252,7 @@ src/
   config/                environment check, database pool and transactions
   middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles,
                          photo uploads
-  services/              connections to outside services (photo storage in Azure)
+  services/              connections to outside services (photo storage in Azure; push notifications from step 17)
   modules/<feature>/     routes → controller → service → repository (Task 1, Section 6.2)
   schemas/common.ts      shared validation rules with user-facing messages
   utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting,
