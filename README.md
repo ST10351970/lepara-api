@@ -424,6 +424,28 @@ Rules built in:
 - **One customer can't see another's orders:** they get `404`, as if the order didn't exist.
 - **At most 3 unpaid orders open at once** per customer (waiting for payment or delivery), so nobody can tie up all the stock with orders they never pay for.
 
+## Orders (admin)
+
+For the dashboard; any signed-in admin.
+
+| Request | Body | What it does |
+| --- | --- | --- |
+| `GET /admin/orders?status=&paymentStatus=&paymentMethod=&from=&to=&search=&sort=&page=&pageSize=` | | Orders, newest first. `status=Confirmed` is the list to pack. `search` looks in the order number, customer name and email, recipient and phone numbers. `from`/`to` are dates (`YYYY-MM-DD`, Johannesburg). `sort` is `newest`, `oldest` or `updated` |
+| `GET /admin/orders/:id` | | One order with its items, delivery address, customer contact details, status history (with the admin who made each change), payments and `actions` |
+| `PATCH /admin/orders/:id/status` | `{ status, courierReference?, reason?, refunded? }` | Moves the order on, or cancels it |
+| `PATCH /admin/orders/:id/payment` | `{ amount, reference? }` | Records an EFT payment that arrived, or the cash collected for a cash-on-delivery order |
+
+**`actions`** tells the dashboard which buttons to show: `nextStatus` (the one step the order can move to, or `null`), `canCancel`, `cancelNeedsRefund` and `canRecordPayment`.
+
+How an order moves:
+
+- **Forward only, one step at a time:** Confirmed → Packed → Shipped → Delivered. Skipping a step or going back gets `409` with the reason, for example "Orders move one step at a time: this order is Confirmed, so the next step is Packed."
+- **Shipped needs a `courierReference`** (the courier's tracking number), otherwise `400`. The customer sees it in the app and the email.
+- **An EFT order** stays Pending payment until its payment is recorded. `amount` is in rands (`310` or `"310.00"`) and must equal the order total, otherwise `400` on `amount`. `reference` is the reference on the bank statement; left empty, it is the order number. Recording the payment confirms the order.
+- **Cash on delivery** can be packed straight away. Record the cash once it is collected (usually after delivery). This doesn't change the status.
+- **Cancelling** (`status: "Cancelled"`) needs a `reason`, which the customer receives in the email and sees in the app. It's allowed until the order is shipped, and the stock goes back. A paid order is only cancelled with `refunded: true`, once the money has been paid back to the customer.
+- **Every change** adds a status history row (when the status changes), an audit log row and an email to the customer. Push notifications follow in step 17. Two admins changing the same order at the same moment: the first wins, the second gets `409`.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -490,6 +512,9 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 15: two orders at once for the last size M hoodie: one succeeds, the other gets 409 | `tests/integration/orders.test.ts` |
 | Step 15: repeating a request with the same Idempotency-Key creates no second order | `tests/integration/orders.test.ts`, `tests/unit/orders.test.ts` |
 | Step 15: customer B gets 404 for customer A's order; cancelling restores the stock | `tests/integration/orders.test.ts` |
+| Step 16: skipping a status (Confirmed straight to Delivered) gets 409; Shipped without a courier reference gets 400 | `tests/integration/adminOrders.test.ts`, `tests/unit/adminOrders.test.ts` |
+| Step 16: the customer's Orders tab shows each step with its time; marking an EFT order paid with the wrong amount gets 400 | `tests/integration/adminOrders.test.ts` |
+| Step 16: an admin cancellation needs a reason and puts the stock back; every change writes an audit row | `tests/integration/adminOrders.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 

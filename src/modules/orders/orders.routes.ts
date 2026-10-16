@@ -3,6 +3,12 @@ import { authenticateCustomer } from '../../middleware/authenticate';
 import { requireIdempotencyKey } from '../../middleware/idempotency';
 import { noStore } from '../../middleware/trustedOrigin';
 import { validate } from '../../middleware/validate';
+import { idParam } from '../../schemas/common';
+import {
+  adminOrderListQuery,
+  orderPaymentSchema,
+  orderStatusSchema,
+} from './adminOrders.schemas';
 import * as controller from './orders.controller';
 import {
   cancelOrderSchema,
@@ -36,4 +42,23 @@ myOrdersRouter.post(
   '/:orderNumber/cancel',
   validate({ params: orderNumberParams, body: cancelOrderSchema }),
   controller.cancelMine,
+);
+
+/**
+ * /api/v1/admin/orders: the dashboard. Mounted in routes.ts behind authenticateAdmin
+ * (staff and super admins). Replies hold customers' contact details, so they are never cached.
+ */
+export const adminOrdersRouter = Router();
+adminOrdersRouter.use(noStore);
+adminOrdersRouter.get('/', validate({ query: adminOrderListQuery }), controller.adminList);
+adminOrdersRouter.get('/:id', validate({ params: idParam }), controller.adminGet);
+adminOrdersRouter.patch(
+  '/:id/status',
+  validate({ params: idParam, body: orderStatusSchema }),
+  controller.adminChangeStatus,
+);
+adminOrdersRouter.patch(
+  '/:id/payment',
+  validate({ params: idParam, body: orderPaymentSchema }),
+  controller.adminRecordPayment,
 );

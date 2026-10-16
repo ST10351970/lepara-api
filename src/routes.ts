@@ -19,7 +19,12 @@ import {
   initiativeTypesRouter,
   initiativesRouter,
 } from './modules/initiatives/initiatives.routes';
-import { cartRouter, myOrdersRouter, ordersRouter } from './modules/orders/orders.routes';
+import {
+  adminOrdersRouter,
+  cartRouter,
+  myOrdersRouter,
+  ordersRouter,
+} from './modules/orders/orders.routes';
 import {
   adminProductCategoriesRouter,
   adminProductsRouter,
@@ -102,6 +107,7 @@ adminRouter.use('/enquiries', adminEnquiriesRouter);
 adminRouter.use('/stock-items', adminStockItemsRouter);
 adminRouter.use('/stock-movements', adminStockMovementsRouter);
 adminRouter.use('/donations', adminDonationsRouter);
+adminRouter.use('/orders', adminOrdersRouter);
 // Later steps add more admin modules here.
 
 apiRouter.use('/admin', adminRouter);

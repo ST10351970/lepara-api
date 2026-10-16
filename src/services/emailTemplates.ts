@@ -510,3 +510,107 @@ export function orderCancelled(data: { to: string; name: string; orderNumber: st
     ORDER_FOOTER,
   );
 }
+
+// --- Order updates from the NGO (step 16) ------------------------------------------------
+
+type OrderUpdate = { to: string; name: string; orderNumber: string };
+
+const followInApp = paragraph('You can follow your order on the Orders tab in the app.');
+
+export function orderPaymentReceived(
+  data: OrderUpdate & { amount: string; paymentMethod: 'EFT' | 'Cash on delivery' },
+) {
+  if (data.paymentMethod === 'EFT') {
+    return build(
+      data.to,
+      `Payment received: ${data.orderNumber}`,
+      data.name,
+      [
+        paragraph(
+          `Thank you! We received your EFT payment of ${data.amount} for order ` +
+            `${data.orderNumber}. Your order is confirmed and we'll pack it soon.`,
+        ),
+        followInApp,
+      ],
+      ORDER_FOOTER,
+    );
+  }
+  return build(
+    data.to,
+    `Payment received: ${data.orderNumber}`,
+    data.name,
+    [
+      paragraph(
+        `Thank you! We received your payment of ${data.amount} for order ${data.orderNumber}.`,
+      ),
+    ],
+    ORDER_FOOTER,
+  );
+}
+
+export function orderPacked(data: OrderUpdate) {
+  return build(
+    data.to,
+    `Your order is packed: ${data.orderNumber}`,
+    data.name,
+    [
+      paragraph(`Good news! Your order ${data.orderNumber} is packed and will be on its way soon.`),
+      followInApp,
+    ],
+    ORDER_FOOTER,
+  );
+}
+
+export function orderShipped(
+  data: OrderUpdate & { courierReference: string; cashDue: string | null },
+) {
+  return build(
+    data.to,
+    `Your order is on the way: ${data.orderNumber}`,
+    data.name,
+    [
+      paragraph(`Your order ${data.orderNumber} is on the way.`),
+      details([['Courier reference', data.courierReference]]),
+      ...(data.cashDue
+        ? [paragraph(`Please have ${data.cashDue} in cash ready to pay the delivery driver.`)]
+        : []),
+      followInApp,
+    ],
+    ORDER_FOOTER,
+  );
+}
+
+export function orderDelivered(data: OrderUpdate) {
+  return build(
+    data.to,
+    `Your order was delivered: ${data.orderNumber}`,
+    data.name,
+    [
+      paragraph(`Your order ${data.orderNumber} was delivered.`),
+      paragraph(`Thank you for supporting ${ORGANISATION}!`),
+    ],
+    ORDER_FOOTER,
+  );
+}
+
+/** Cancelled by the NGO. The reason is written by an admin. */
+export function orderCancelledByUs(
+  data: OrderUpdate & { reason: string; refunded: string | null },
+) {
+  return build(
+    data.to,
+    `Order cancelled: ${data.orderNumber}`,
+    data.name,
+    [
+      paragraph(`We're sorry, we had to cancel your order ${data.orderNumber}.`),
+      details([['Reason', data.reason]]),
+      paragraph(
+        data.refunded
+          ? `Your payment of ${data.refunded} has been paid back to you.`
+          : 'Nothing is owed for it.',
+      ),
+      paragraph('If you have any questions, please reply to this email.'),
+    ],
+    ORDER_FOOTER,
+  );
+}

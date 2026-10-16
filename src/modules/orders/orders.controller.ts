@@ -1,8 +1,14 @@
 import type { Request, Response } from 'express';
-import { currentCustomer } from '../../middleware/authenticate';
+import { currentAdmin, currentCustomer } from '../../middleware/authenticate';
 import { idempotencyClaim, replay } from '../../middleware/idempotency';
 import { validated } from '../../middleware/validate';
 import { ok } from '../../utils/respond';
+import type {
+  AdminOrderListQuery,
+  OrderPaymentInput,
+  OrderStatusInput,
+} from './adminOrders.schemas';
+import * as adminService from './adminOrders.service';
 import type {
   CancelOrderInput,
   MyOrdersQuery,
@@ -55,4 +61,32 @@ export async function cancelMine(_req: Request, res: Response): Promise<void> {
     res,
     await service.cancelMyOrder(currentCustomer(res).customerId, params.orderNumber, body),
   );
+}
+
+// --- Admin (the dashboard) --------------------------------------------------------------------
+
+type Id = { params: { id: number } };
+
+/** GET /admin/orders */
+export async function adminList(_req: Request, res: Response): Promise<void> {
+  const { query } = validated<{ query: AdminOrderListQuery }>(res);
+  const { orders, meta } = await adminService.listOrders(query);
+  ok(res, orders, meta);
+}
+
+/** GET /admin/orders/:id */
+export async function adminGet(_req: Request, res: Response): Promise<void> {
+  ok(res, await adminService.getOrder(validated<Id>(res).params.id));
+}
+
+/** PATCH /admin/orders/:id/status */
+export async function adminChangeStatus(_req: Request, res: Response): Promise<void> {
+  const { params, body } = validated<Id & { body: OrderStatusInput }>(res);
+  ok(res, await adminService.changeStatus(currentAdmin(res).adminId, params.id, body));
+}
+
+/** PATCH /admin/orders/:id/payment */
+export async function adminRecordPayment(_req: Request, res: Response): Promise<void> {
+  const { params, body } = validated<Id & { body: OrderPaymentInput }>(res);
+  ok(res, await adminService.recordPayment(currentAdmin(res).adminId, params.id, body));
 }
