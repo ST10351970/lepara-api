@@ -11,6 +11,7 @@ Built so far, following the build guide:
 - **Phase 2, Step 8:** announcements for the app's News screen.
 - **Phase 2, Step 9:** the shop: products, sizes with stock, categories and product photos.
 - **Phase 3, Step 10:** the four public forms (volunteer, donation pledge, request help, enquiry), with reference numbers and confirmation emails.
+- **Phase 3, Step 11:** "Track my request": the status of a volunteer application, pledge or request for help, from its reference number and phone digits.
 
 ## Requirements
 
@@ -262,13 +263,31 @@ Emails go out **after** the reply, so a slow or broken mail service never delays
 **Brevo (free, 300 emails a day):**
 
 1. Sign up at brevo.com.
-2. Add the sender address: **Settings → Senders, Domains & Dedicated IPs → Senders → Add a sender**, then click the link Brevo emails to it (any inbox you can open will do). Put it in `MAIL_FROM` as `Lepara Ale fele Moya <that address>`.
-3. Make an API key: open the menu under your account name (top right), then **SMTP & API → API Keys → Generate a new API key**. It starts with `xkeysib-`. Put it in `BREVO_API_KEY`.
+2. Add the sender address: **Settings (the gear icon) → Senders, domains, IPs → Senders → Add a sender**, then click the link Brevo emails to it (any inbox you can open will do). Put it in `MAIL_FROM` as `Lepara Ale fele Moya <that address>`.
+3. Make an API key: **Settings → SMTP & API → API Keys → Generate a new API key**. Choose **Restricted** access and set **Transactional email** to **All** (sending needs it); leave everything else on **None**. The key starts with `xkeysib-` and is shown only once. Put it in `BREVO_API_KEY`. Brevo switches a key off after 90 days without use, so make a new one if emails stop after a quiet spell.
 4. Render's outgoing address can change, so check **Settings → Security → Authorized IPs**: if blocking is **Activated** for API keys, choose **Deactivate for API**. Otherwise Brevo answers `401 ... unrecognised IP address` and the log shows "Email was refused".
 
 **Gmail, for testing on your own machine:** turn on 2-Step Verification for the Google account, create an **app password** at myaccount.google.com/apppasswords, then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER` (the Gmail address), `SMTP_PASS` (the 16-letter app password, without spaces) and `MAIL_FROM` (the same Gmail address).
 
 The API key and the app password are passwords: never commit them or share them.
+
+## Track my request
+
+`POST /track` `{ referenceNumber, phoneLast4 }` (no sign-in). The reference number can be typed in any case, with or without the dash or spaces (`req 7k3p9x` works). `phoneLast4` is the last 4 digits of the phone number given on the form.
+
+A match replies `200` with:
+
+```json
+{ "success": true, "data": { "referenceNumber": "REQ-7K3P9X", "type": "assistance_request", "typeLabel": "Request for help", "status": "Under review", "statusMessage": "Our team is reviewing your request.", "isFinal": false, "submittedAt": "2026-10-16T08:30:00.000Z", "lastUpdatedAt": "2026-10-17T10:05:00.000Z" } }
+```
+
+- `type` is `volunteer_application` (VOL), `assistance_request` (REQ) or `donation_pledge` (PLG). `statusMessage` is a ready-made sentence for the screen. `isFinal` is `true` once nothing more will happen (for example Declined or Received).
+- `lastUpdatedAt` is when an admin last made a decision, or `submittedAt` if nobody has yet.
+- **No personal details** are ever in the reply: no name, phone number, email, description or event.
+- **A wrong reference number and wrong digits get the same reply:** `404` "We couldn't find a match. Please check your reference number and phone number." So nobody can find out whether a reference number exists by guessing. The digits are compared in constant time.
+- A reference number in the wrong shape (not like `REQ-7K3P9X`) gets `400` on the `referenceNumber` field.
+- **5 wrong attempts per IP address per 15 minutes**, then `429`. Correct attempts don't count.
+- Enquiries have no reference number, so they can't be tracked.
 
 ## Managing admins (super admins only)
 
@@ -322,6 +341,8 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 10: each form returns a reference number and emails it; a draft or ended event gets a friendly refusal; the 6th form in 10 minutes gets 429; an unticked consent box gets 400 on `consent` | `tests/integration/submissions.test.ts`, `tests/unit/submissions.test.ts` |
 | Step 10: a filled-in spam-trap field gets a pretend success and saves nothing | `tests/integration/submissions.test.ts`, `tests/unit/submissions.test.ts` |
 | Step 10: an unreachable mail server is retried 3 times, then logged; the form is saved and answered straight away | `tests/unit/email.test.ts` (and by hand, below) |
+| Step 11: the right reference and digits return the status; a wrong reference and wrong digits give identical replies | `tests/integration/tracking.test.ts` |
+| Step 11: the reply holds no personal details; the 6th wrong attempt gets 429 | `tests/integration/tracking.test.ts`, `tests/unit/tracking.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 

@@ -27,6 +27,7 @@ import {
   formOptionsRouter,
   volunteerApplicationsRouter,
 } from './modules/submissions/submissions.routes';
+import { trackingRouter } from './modules/tracking/tracking.routes';
 
 /** Everything under /api/v1. Each later step mounts its module here. */
 export const apiRouter = Router();
@@ -47,6 +48,9 @@ apiRouter.use('/volunteer-applications', volunteerApplicationsRouter);
 apiRouter.use('/donation-pledges', donationPledgesRouter);
 apiRouter.use('/assistance-requests', assistanceRequestsRouter);
 apiRouter.use('/enquiries', enquiriesRouter);
+
+// Track my request: reference number + last 4 phone digits (5 wrong tries per 15 minutes).
+apiRouter.use('/track', trackingRouter);
 
 // --- Admin (website only) ------------------------------------------------------
 
