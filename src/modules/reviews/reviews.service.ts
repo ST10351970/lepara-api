@@ -180,7 +180,7 @@ export async function decideVolunteerApplication(
 
 export type RequestItem = ReturnType<typeof toRequestItem>;
 
-function toRequestItem(row: RequestRow) {
+export function toRequestItem(row: RequestRow) {
   return {
     requestId: row.request_id,
     referenceNumber: row.reference_number,
@@ -292,7 +292,7 @@ export async function decideAssistanceRequest(
 
 export type PledgeItem = ReturnType<typeof toPledgeItem>;
 
-function toPledgeItem(row: PledgeRow) {
+export function toPledgeItem(row: PledgeRow) {
   const cents = row.estimated_value === null ? null : numericToCents(row.estimated_value);
   return {
     pledgeId: row.pledge_id,

@@ -282,3 +282,20 @@ export function donationPledgeDeclined(data: {
     paragraph('We hope you will consider supporting one of our future drives.'),
   ]);
 }
+
+// --- Donations (step 13) ------------------------------------------------------------------
+
+export function donationPledgeReceivedThankYou(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  category: string;
+}): EmailMessage {
+  return build(data.to, `Thank you for your donation: ${data.referenceNumber}`, data.name, [
+    paragraph(`We have received your donation. Thank you for supporting ${ORGANISATION}!`),
+    details([
+      ['Reference', data.referenceNumber],
+      ['Donation type', data.category],
+    ]),
+  ]);
+}

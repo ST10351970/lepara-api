@@ -7,6 +7,10 @@ import {
   announcementsRouter,
 } from './modules/announcements/announcements.routes';
 import { adminUsersRouter } from './modules/adminUsers/adminUsers.routes';
+import {
+  adminDonationsRouter,
+  adminPledgeReceiptRouter,
+} from './modules/donations/donations.routes';
 import { healthRouter } from './modules/health/health.routes';
 import {
   adminInitiativeTypesRouter,
@@ -33,6 +37,11 @@ import {
   adminEnquiriesRouter,
   adminVolunteerApplicationsRouter,
 } from './modules/reviews/reviews.routes';
+import {
+  adminFulfilmentRouter,
+  adminStockItemsRouter,
+  adminStockMovementsRouter,
+} from './modules/stock/stock.routes';
 import { trackingRouter } from './modules/tracking/tracking.routes';
 
 /** Everything under /api/v1. Each later step mounts its module here. */
@@ -76,9 +85,12 @@ adminRouter.use('/announcements', adminAnnouncementsRouter);
 adminRouter.use('/products', adminProductsRouter);
 adminRouter.use('/product-categories', adminProductCategoriesRouter);
 adminRouter.use('/volunteer-applications', adminVolunteerApplicationsRouter);
-adminRouter.use('/assistance-requests', adminAssistanceRequestsRouter);
-adminRouter.use('/donation-pledges', adminDonationPledgesRouter);
+adminRouter.use('/assistance-requests', adminAssistanceRequestsRouter, adminFulfilmentRouter);
+adminRouter.use('/donation-pledges', adminDonationPledgesRouter, adminPledgeReceiptRouter);
 adminRouter.use('/enquiries', adminEnquiriesRouter);
+adminRouter.use('/stock-items', adminStockItemsRouter);
+adminRouter.use('/stock-movements', adminStockMovementsRouter);
+adminRouter.use('/donations', adminDonationsRouter);
 // Later steps add more admin modules here.
 
 apiRouter.use('/admin', adminRouter);

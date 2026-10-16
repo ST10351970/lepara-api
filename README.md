@@ -13,6 +13,7 @@ Built so far, following the build guide:
 - **Phase 3, Step 10:** the four public forms (volunteer, donation pledge, request help, enquiry), with reference numbers and confirmation emails.
 - **Phase 3, Step 11:** "Track my request": the status of a volunteer application, pledge or request for help, from its reference number and phone digits.
 - **Phase 3, Step 12:** the admin review queues: accept or decline volunteers, requests for help and pledges (with a decision email), record attendance, close requests, mark enquiries reviewed.
+- **Phase 3, Step 13:** donations and stock: recording and voiding donations, stock items and adjustments, receiving pledges, and fulfilling requests from stock.
 
 ## Requirements
 
@@ -322,6 +323,38 @@ Each item has the person's details, `status`, `submittedAt`, `reviewedAt`, `revi
 - Every decision saves who made it and when, writes an `audit_log` row, and shows up in tracking at once. Accepting, approving and declining also email the person, if they gave an email address.
 - If two admins decide on the same submission at the same moment, one decision is saved and the other gets `409`.
 
+## Donations and stock (admin)
+
+Staff and super admins. Every change here runs in one transaction that locks the stock rows it changes, so two admins can never give out the same last blanket twice, and a failure halfway saves nothing. Stock only ever changes through a movement (a donation, a fulfilled request or an adjustment), so each item's movements always add up to its quantity on hand.
+
+| Request | What it does |
+| --- | --- |
+| `GET /admin/stock-items?search=&category=&low=true&sort=name\|quantity\|category` | Stock items. `low=true` shows only items at or below their low-stock level (`isLow`) |
+| `GET /admin/stock-items/:id` | One item |
+| `POST /admin/stock-items` `{ name, category?, unit, reorderLevel?, openingQuantity? }` | A new item. `unit` is singular (`blanket`). The opening stock is recorded as a movement |
+| `PATCH /admin/stock-items/:id` `{ name?, category?, unit?, reorderLevel? }` | Changes details. The quantity can't be set here |
+| `GET /admin/stock-items/:id/movements?page=&pageSize=` | The item's history, newest first. Each movement's `source` is a donation, a request or an adjustment |
+| `POST /admin/stock-movements` `{ stockItemId, type, quantity, reason }` | An adjustment by hand (`Increase` or `Decrease`): damaged goods, a recount. Never below zero |
+| `GET /admin/donations?type=&status=active\|voided\|all&initiativeId=&stockItemId=&from=&to=&search=&sort=newest\|oldest\|donor\|amount` | Recorded donations. `search` looks in the donor's name and the receipt reference |
+| `GET /admin/donations/:id` | One donation |
+| `POST /admin/donations` | Records a donation (below) |
+| `POST /admin/donations/:id/void` `{ reason }` | Voids a mistake: keeps the record and takes its goods back out of stock |
+| `POST /admin/donation-pledges/:id/receive` | An accepted pledge has arrived: records the donation and marks the pledge Received |
+| `POST /admin/assistance-requests/:id/fulfil` `{ items: [{ stockItemId, quantity }] }` | An approved request was helped: takes the items out of stock and marks it Fulfilled |
+
+**Recording a donation:** `{ type, donorName, isAnonymous?, initiativeId?, dateReceived?, ... }` plus, by type (Task 1, Section 8.4):
+
+- `Monetary`: `amount` in rands (`250` or `"250.50"`) and an optional `receiptReference`. A quantity or stock item gets `400`.
+- `Goods`: `stockItemId` and `quantity`. An amount gets `400`. Stock goes up by exactly the quantity.
+
+`dateReceived` defaults to today and can't be in the future. With `isAnonymous: true` the name may be left out (it is saved as "Anonymous").
+
+**Receiving a pledge** takes the same `amount`/`receiptReference` or `stockItemId`/`quantity`. The donor and event come from the pledge, and the type follows its category (`type` can override it). The pledge must be Accepted (`409` otherwise), the donor gets a thank-you email, and tracking shows Received.
+
+**Fulfilling a request:** the request must be Approved. Send `{ "items": [] }` when the help wasn't goods. If any item is short, nothing is taken and the reply is `409` naming the item and how many are left. Afterwards the request can be closed with `PATCH /admin/assistance-requests/:id/decision` `{ "status": "Closed" }`.
+
+**Voiding** needs a reason. If some of the donated goods have already been given out, taking them back would push stock below zero, so the reply is `409` saying so. Fix the stock with an adjustment instead. Voiding a donation that came from a pledge leaves the pledge Received.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -378,6 +411,9 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 11: the reply holds no personal details; the 6th wrong attempt gets 429 | `tests/integration/tracking.test.ts`, `tests/unit/tracking.test.ts` |
 | Step 12: declining without a reason gets 400; deciding an already decided submission gets 409 | `tests/integration/reviews.test.ts`, `tests/unit/reviews.test.ts` |
 | Step 12: the person gets the decision email and tracking shows the new status; every decision records the admin and an audit row | `tests/integration/reviews.test.ts` |
+| Step 13: a goods donation raises stock by exactly its quantity, and a forced error halfway saves nothing; a monetary donation with a quantity is rejected | `tests/integration/stock.test.ts`, `tests/unit/stock.test.ts` |
+| Step 13: two fulfilments at once for the last 5 blankets: one succeeds, the other gets 409; voiding after the goods were given out gets 409 | `tests/integration/stock.test.ts` |
+| Step 13: each item's movements add up to its quantity on hand | `tests/integration/stock.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
