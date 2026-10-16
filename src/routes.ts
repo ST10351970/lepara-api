@@ -19,6 +19,7 @@ import {
   initiativeTypesRouter,
   initiativesRouter,
 } from './modules/initiatives/initiatives.routes';
+import { cartRouter, myOrdersRouter, ordersRouter } from './modules/orders/orders.routes';
 import {
   adminProductCategoriesRouter,
   adminProductsRouter,
@@ -71,6 +72,10 @@ apiRouter.use('/track', trackingRouter);
 // --- Customers (the app's Account tab and the shop) ------------------------------
 
 apiRouter.use('/auth', customerAuthRouter);
+// The shop: prices the bag (no sign-in), places orders and shows them (signed in).
+apiRouter.use('/cart', cartRouter);
+apiRouter.use('/orders', ordersRouter);
+apiRouter.use('/me/orders', myOrdersRouter);
 apiRouter.use('/me', customerMeRouter);
 
 // --- Admin (website only) ------------------------------------------------------

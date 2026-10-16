@@ -22,6 +22,8 @@ export const ErrorCode = {
   ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
   /** A customer signed in with the right password but hasn't confirmed their email yet. */
   EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
+  /** The same Idempotency-Key came with a different request: the app should make a new key. */
+  IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',

@@ -14,6 +14,12 @@ process.env.JWT_CUSTOMER_SECRET = 'test-only-customer-token-secret-not-for-real-
 process.env.BREVO_API_KEY = '';
 process.env.SMTP_HOST = '';
 
+// The shop: R60 delivery and no bank details, whatever .env says.
+process.env.DELIVERY_FEE_CENTS = '6000';
+for (const key of ['EFT_BANK_NAME', 'EFT_ACCOUNT_NAME', 'EFT_ACCOUNT_NUMBER', 'EFT_BRANCH_CODE']) {
+  process.env[key] = '';
+}
+
 // Tests always talk to the test database, never the development one.
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://not:configured@127.0.0.1:1/not_configured_test';

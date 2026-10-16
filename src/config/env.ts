@@ -111,6 +111,33 @@ const envSchema = z
       (value) => value === undefined || MAIL_FROM_PATTERN.test(value),
       'must be an email address, for example: Lepara Ale fele Moya <hello@example.org>',
     ),
+
+    // Shop. The delivery fee in cents (6000 is R60), added once to every order.
+    DELIVERY_FEE_CENTS: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined)
+      .refine(
+        (value) => value === undefined || /^\d{1,6}$/.test(value),
+        'must be a whole number of cents, for example 6000 for R60',
+      )
+      .transform((value) => (value === undefined ? 6000 : Number(value)))
+      .refine(
+        (cents) => cents === 0 || (cents >= 100 && cents <= 100_000),
+        'is in cents: 6000 is R60 (0 for free delivery, at most 100000)',
+      ),
+    // The bank account customers pay into for EFT orders. Optional, but all four go
+    // together: without them, EFT orders show the reference and amount only.
+    EFT_BANK_NAME: optionalText,
+    EFT_ACCOUNT_NAME: optionalText,
+    EFT_ACCOUNT_NUMBER: optionalText.refine(
+      (value) => value === undefined || /^\d[\d ]{4,24}$/.test(value),
+      'must be the account number (digits only)',
+    ),
+    EFT_BRANCH_CODE: optionalText.refine(
+      (value) => value === undefined || /^\d{6}$/.test(value),
+      'must be the 6-digit branch code',
+    ),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.DATABASE_SSL) {
@@ -133,6 +160,22 @@ const envSchema = z
         path: ['JWT_CUSTOMER_SECRET'],
         message: 'must be different from JWT_ADMIN_SECRET',
       });
+    }
+    const bank = [
+      'EFT_BANK_NAME',
+      'EFT_ACCOUNT_NAME',
+      'EFT_ACCOUNT_NUMBER',
+      'EFT_BRANCH_CODE',
+    ] as const;
+    const missing = bank.filter((key) => !env[key]);
+    if (missing.length > 0 && missing.length < bank.length) {
+      for (const key of missing) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'is required: the four EFT_ bank settings go together (set all or none)',
+        });
+      }
     }
     if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {
       ctx.addIssue({

@@ -382,7 +382,7 @@ A **session** is `{ accessToken, tokenType: "Bearer", expiresIn: 900, customer }
 
 How the app and the website should use it:
 
-- **Send the access token** as `Authorization: Bearer <accessToken>` on `/me` (and orders, from step 15). It lasts 15 minutes; on `TOKEN_EXPIRED`, refresh and try again.
+- **Send the access token** as `Authorization: Bearer <accessToken>` on `/me` and the order requests below. It lasts 15 minutes; on `TOKEN_EXPIRED`, refresh and try again.
 - **The mobile app** gets the refresh token in the reply. Keep it in secure storage (`expo-secure-store`), never in AsyncStorage, and send it to `/auth/refresh` and `/auth/logout` as `{ "refreshToken": "..." }`. It lasts 7 days and is replaced on every refresh, so always save the new one.
 - **The website** never sees the refresh token: it's in an httpOnly cookie. Call `/auth/*` with `fetch(url, { credentials: 'include' })`. (The API tells them apart by the `Origin` header, which browsers always send and the app doesn't.)
 - **Error codes:** `EMAIL_NOT_VERIFIED` (403, right password but the email isn't confirmed: show the code screen and offer "resend"), `ACCOUNT_LOCKED` (423), `RATE_LIMITED` (429), `VALIDATION_ERROR` (show `fields`; wrong codes are on the `code` field).
@@ -395,6 +395,34 @@ Security rules built in:
 - **Refresh tokens** are stored only as hashes and replaced on every use. If an old one comes back, someone copied it, so every session that customer has is ended.
 - **Changing or resetting the password** signs out every other device straight away (their access tokens stop working too), and the customer gets an email about it.
 - **A new email address** only replaces the old one after the code sent to it is entered.
+
+## Cart and orders (the app's checkout and Orders tab)
+
+The bag stays on the phone. The API prices it and places it; it never trusts a price or total from the app.
+
+| Request | Sign-in | Body | Reply (`data`) |
+| --- | --- | --- | --- |
+| `POST /cart/quote` | No | `{ items: [{ variantId, quantity }] }` | The checkout summary (below) |
+| `POST /orders` | Customer, plus an `Idempotency-Key` header | `{ items, recipientName, streetAddress, city, postalCode, phone, paymentMethod, acceptTerms: true }` | `201` and the order |
+| `GET /me/orders?page=&pageSize=` | Customer | | The customer's orders, newest first |
+| `GET /me/orders/:orderNumber` | Customer | | One order, e.g. `/me/orders/LAFM-1008` |
+| `POST /me/orders/:orderNumber/cancel` | Customer | `{ reason? }` | The order, now Cancelled |
+
+- **Lines** are `{ variantId, quantity }`: the `variantId` of the size picked on the product page, 1 to 10 of each, 1 to 20 lines, each size once.
+- **The checkout summary** has `lines` (each with `name`, `size`, `unitPrice`, `lineTotal`, `availability` and a `problem` to show under it, or `null`), `itemCount`, `subtotal`, `deliveryFee`, `total` (each also in cents, e.g. `totalCents`), `canPlaceOrder` and `paymentMethods` (the two choices, with a label and a note for the screen). A problem never makes the quote fail: it says what to fix, e.g. `"Community hoodie (size M): only 1 left. Please lower the quantity."`
+- **Placing an order** checks everything again inside one database transaction. If a line can't be ordered, the reply is `409` naming the item and how many are left (`fields` has one entry per line: `items.0`, `items.1`, ...), and nothing is saved.
+- **`paymentMethod`** is `"EFT"` or `"Cash on delivery"`. Remove the card fields from the app. An EFT order starts as Pending payment, and its `paymentInstructions` give the reference (the order number), the amount and the bank details. A cash-on-delivery order starts as Confirmed.
+- **The order** has `orderNumber`, `status` and `statusLabel` (the app's words), `statusMessage` (what happens next), `paymentMethod`, `paymentStatus`, `canCancel`, `placedAt`, `items`, the totals, `deliveryAddress`, `courierReference`, `paymentInstructions`, `tracking` (the four steps on the tracking card: Order confirmed, Packed with care, On the way, Delivered, each with `done` and its time `at`) and `history`.
+- **Cancelling** works while the order is Pending payment or Confirmed and unpaid. The stock goes back and the customer gets an email. A paid order needs the NGO to arrange the refund, so the reply is `409` asking the customer to contact the NGO.
+
+**The `Idempotency-Key` header** stops a double tap from creating two orders. When the customer taps "Place order", the app makes a new UUID (`Crypto.randomUUID()` from `expo-crypto`) and sends it with that request. If the request has to be sent again (no reply, a dropped connection), send it with **the same key**: the API replies with the first order (and the header `Idempotent-Replayed: true`) instead of placing a second one. After a success, clear the bag and make a new key for the next order. Keys last 24 hours. The same key with a different bag gets `422 IDEMPOTENCY_KEY_REUSED`.
+
+Rules built in:
+
+- **Prices come from the database only.** A price, name or total in the request is ignored. The quote and the order use the same pricing code, so the totals always match: line total = unit price × quantity, subtotal = the lines, total = subtotal + delivery (`DELIVERY_FEE_CENTS`, R60). The database also refuses an order whose total isn't the subtotal plus delivery.
+- **Stock can't be oversold:** placing an order locks the sizes it takes, so two orders for the last item at the same moment give one success and one `409`.
+- **One customer can't see another's orders:** they get `404`, as if the order didn't exist.
+- **At most 3 unpaid orders open at once** per customer (waiting for payment or delivery), so nobody can tie up all the stock with orders they never pay for.
 
 ## Managing admins (super admins only)
 
@@ -458,6 +486,10 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 14: register, the code arrives, verify, signed in; registering an existing email gets the same reply as a new one | `tests/integration/customerAuth.test.ts` |
 | Step 14: five wrong codes end that code; a resend within 60 seconds gets 429; signing in unverified gets `EMAIL_NOT_VERIFIED` | `tests/integration/customerAuth.test.ts`, `tests/unit/customerAuth.test.ts` |
 | Step 14: changing the password signs out other devices; a customer token on an `/admin` route gets 401 | `tests/integration/customerAuth.test.ts`, `tests/unit/customerAuth.test.ts` |
+| Step 15: a price changed in the request has no effect on the total; the quote total equals the order total | `tests/integration/orders.test.ts`, `tests/unit/orders.test.ts` |
+| Step 15: two orders at once for the last size M hoodie: one succeeds, the other gets 409 | `tests/integration/orders.test.ts` |
+| Step 15: repeating a request with the same Idempotency-Key creates no second order | `tests/integration/orders.test.ts`, `tests/unit/orders.test.ts` |
+| Step 15: customer B gets 404 for customer A's order; cancelling restores the stock | `tests/integration/orders.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
@@ -469,7 +501,7 @@ To check by hand that the app user cannot drop a table, connect as `lepara_app` 
 - **Build command:** `npm ci --include=dev && npm run build && npm prune --omit=dev` (TypeScript is a dev dependency, so it must be installed to build)
 - **Start command:** `npm start`
 - **Health check path:** `/api/v1/health`
-- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `JWT_CUSTOMER_SECRET` (a different value), `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`, and for email `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan SMTP is blocked, so use Brevo's API there). The host sets `PORT`.
+- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `JWT_CUSTOMER_SECRET` (a different value), `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`, for email `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan SMTP is blocked, so use Brevo's API there), and for the shop the four `EFT_` bank settings (`DELIVERY_FEE_CENTS` only if it isn't R60). The host sets `PORT`.
 - **Never change `TOTP_ENCRYPTION_KEY` on the live server** once admins have set up 2FA: their authenticator apps would stop working and each would need 2FA reset.
 
 Run `npm run migrate:up` from your own machine, with `MIGRATION_DATABASE_URL` pointing at the cloud database, before deploying code that needs new tables.
@@ -483,7 +515,7 @@ src/
   routes.ts              mounts each module under /api/v1
   config/                environment check, database pool and transactions
   middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles,
-                         photo uploads, the forms' spam trap
+                         photo uploads, the forms' spam trap, Idempotency-Key for orders
   services/              connections to outside services (photo storage in Azure, email and its templates;
                          push notifications from step 17)
   modules/<feature>/     routes → controller → service → repository (Task 1, Section 6.2)

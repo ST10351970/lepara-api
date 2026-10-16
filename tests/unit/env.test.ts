@@ -108,6 +108,33 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...minimal, SMTP_SECURE: 'yes' })).toThrow(/SMTP_SECURE/);
   });
 
+  it('charges R60 delivery unless set, and takes the EFT bank details all together', () => {
+    expect(loadEnv(minimal).DELIVERY_FEE_CENTS).toBe(6000);
+    expect(loadEnv({ ...minimal, DELIVERY_FEE_CENTS: '' }).DELIVERY_FEE_CENTS).toBe(6000);
+    expect(loadEnv({ ...minimal, DELIVERY_FEE_CENTS: '7500' }).DELIVERY_FEE_CENTS).toBe(7500);
+    expect(loadEnv({ ...minimal, DELIVERY_FEE_CENTS: '0' }).DELIVERY_FEE_CENTS).toBe(0);
+    // Rands by mistake: "60" would be 60 cents, and "60.00" isn't cents at all.
+    expect(() => loadEnv({ ...minimal, DELIVERY_FEE_CENTS: '60' })).toThrow(/6000 is R60/);
+    expect(() => loadEnv({ ...minimal, DELIVERY_FEE_CENTS: '60.00' })).toThrow(
+      /DELIVERY_FEE_CENTS/,
+    );
+
+    const bank = {
+      EFT_BANK_NAME: 'Example Bank',
+      EFT_ACCOUNT_NAME: 'Lepara Ale fele Moya NPC',
+      EFT_ACCOUNT_NUMBER: '1234567890',
+      EFT_BRANCH_CODE: '250655',
+    };
+    expect(loadEnv({ ...minimal, ...bank }).EFT_ACCOUNT_NUMBER).toBe('1234567890');
+    expect(loadEnv(minimal).EFT_BANK_NAME).toBeUndefined();
+    expect(() => loadEnv({ ...minimal, ...bank, EFT_BRANCH_CODE: '' })).toThrow(
+      /EFT_BRANCH_CODE is required/,
+    );
+    expect(() => loadEnv({ ...minimal, ...bank, EFT_BRANCH_CODE: '25065' })).toThrow(
+      /6-digit branch code/,
+    );
+  });
+
   it('insists on SSL to the database in production', () => {
     expect(() => loadEnv({ ...minimal, NODE_ENV: 'production' })).toThrow(
       /must be true in production/,
