@@ -9,6 +9,7 @@ Built so far, following the build guide:
 - **Phase 2, Step 6:** admin user management: super admins add, edit and deactivate admins, and reset a lost authenticator or a forgotten password.
 - **Phase 2, Step 7:** events: the public event list and pages for the app, event types, volunteer tasks, and photo uploads to Azure Blob Storage.
 - **Phase 2, Step 8:** announcements for the app's News screen.
+- **Phase 2, Step 9:** the shop: products, sizes with stock, categories and product photos.
 
 ## Requirements
 
@@ -181,6 +182,39 @@ Rules:
 
 Each announcement has `announcementId`, `title`, `body`, `publishedAt` and `dateLabel`, the publishing date in Johannesburg written like `"16 Oct 2026"`. The admin replies also have `isActive` and `publishedBy`. Titles are 5 to 120 characters and the text is 10 to 2,000. Publishing will also send a push notification once step 17 is built.
 
+## Shop (products)
+
+**For the app and website (no sign-in):**
+
+| Request | What it gives |
+| --- | --- |
+| `GET /products?search=&categoryId=&page=&pageSize=` | Product cards, by category then name. `search` looks in the name, colour, material and category |
+| `GET /products/:id` | One product page, with each size's availability |
+| `GET /product-categories` | Categories for the filter chips, with `productCount` (shown products only) |
+
+A product card has `productId`, `name`, `categoryId`, `categoryName`, `colour`, `material`, `priceCents`, `price` (the label, e.g. `"R250"`), `subtitle` (e.g. `"White / Cotton / XS–XXL"`), `imageUrl`, `sizes` (smallest first) and `inStock`. The product page adds `description` and `variants`: `[{ variantId, size, availability }]`, where availability is `"In stock"`, `"Low stock"` (3 or fewer) or `"Sold out"`. The exact number left is never shown in the app. Keep `variantId`: the cart and orders (step 15) use it.
+
+**For the admin dashboard (any signed-in admin):**
+
+| Request | What it does |
+| --- | --- |
+| `GET /admin/products?status=active\|inactive\|all&search=&categoryId=` | All products, with SKU codes, exact stock per size and `totalStock` |
+| `GET /admin/products/:id` | One product |
+| `POST /admin/products` | `{ categoryId, name, colour?, material?, description?, price, isActive?, variants?: [{ size, sku, quantityOnHand }] }`. `price` is in rands (`250` or `"250.50"`) |
+| `PATCH /admin/products/:id` | Change details or price; `isActive: false` hides it, `true` shows it |
+| `POST /admin/products/:id/image` | The product photo, the same way as event photos |
+| `POST /admin/products/:id/variants` | Add a size: `{ size, sku, quantityOnHand }` |
+| `PATCH /admin/products/:id/variants/:variantId` | Change a size's SKU code or stock count |
+| `GET`, `POST /admin/product-categories`; `PATCH /admin/product-categories/:id` | Categories: `{ name, sortOrder }` (lower numbers show first) |
+
+Rules:
+
+- **Products are hidden, never deleted**, because orders refer to them. A new product starts hidden, and can only be shown once it has at least one size.
+- **Sizes** are `XS`, `S`, `M`, `L`, `XL`, `XXL` or `One size`, each once per product. A size can't be renamed; add the right one instead.
+- **SKU codes** are unique across the shop, ignoring capitals (they are stored in capitals).
+- **Prices** must be more than R0. Every price and stock change is recorded in the audit log with the old and new value.
+- **Search** is safe to use with any text: a search for `'; DROP TABLE product; --` simply finds nothing.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -228,6 +262,8 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 7: a renamed non-image file gets 415; a file over 2 MB gets 413 | `tests/integration/initiatives.test.ts`, `tests/unit/initiatives.test.ts` |
 | Step 7: a task with volunteer applications can't be deleted; type names are unique | `tests/integration/initiatives.test.ts` |
 | Step 8: hidden announcements never appear publicly; the public list is newest first and paginated | `tests/integration/announcements.test.ts` |
+| Step 9: inactive products are hidden from the public; a search for `'; DROP TABLE product; --` returns an empty list | `tests/integration/products.test.ts` |
+| Step 9: stock shows as In stock, Low stock or Sold out; sizes and SKU codes are unique | `tests/integration/products.test.ts`, `tests/unit/products.test.ts` |
 
 To check by hand that the app user cannot drop a table, connect as `lepara_app` and run `DROP TABLE donation;`. It should fail with "must be owner of table donation".
 

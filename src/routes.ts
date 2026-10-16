@@ -14,6 +14,12 @@ import {
   initiativeTypesRouter,
   initiativesRouter,
 } from './modules/initiatives/initiatives.routes';
+import {
+  adminProductCategoriesRouter,
+  adminProductsRouter,
+  productCategoriesRouter,
+  productsRouter,
+} from './modules/products/products.routes';
 
 /** Everything under /api/v1. Each later step mounts its module here. */
 export const apiRouter = Router();
@@ -25,6 +31,8 @@ apiRouter.use('/health', healthRouter);
 apiRouter.use('/initiatives', initiativesRouter);
 apiRouter.use('/initiative-types', initiativeTypesRouter);
 apiRouter.use('/announcements', announcementsRouter);
+apiRouter.use('/products', productsRouter);
+apiRouter.use('/product-categories', productCategoriesRouter);
 
 // --- Admin (website only) ------------------------------------------------------
 
@@ -41,6 +49,8 @@ adminRouter.use('/users', requireRole('super_admin'), adminUsersRouter);
 adminRouter.use('/initiatives', adminInitiativesRouter);
 adminRouter.use('/initiative-types', adminInitiativeTypesRouter);
 adminRouter.use('/announcements', adminAnnouncementsRouter);
+adminRouter.use('/products', adminProductsRouter);
+adminRouter.use('/product-categories', adminProductCategoriesRouter);
 // Later steps add more admin modules here.
 
 apiRouter.use('/admin', adminRouter);

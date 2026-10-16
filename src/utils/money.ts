@@ -46,3 +46,9 @@ export function formatRand(cents: number): string {
     .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   return `${sign}R${whole}.${String(absolute % 100).padStart(2, '0')}`;
 }
+
+/** 25000 → "R250", 25050 → "R250.50", 125000 → "R1 250": prices on product cards. */
+export function formatPrice(cents: number): string {
+  const full = formatRand(cents);
+  return full.endsWith('.00') ? full.slice(0, -3) : full;
+}
