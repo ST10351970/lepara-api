@@ -27,6 +27,12 @@ import {
   formOptionsRouter,
   volunteerApplicationsRouter,
 } from './modules/submissions/submissions.routes';
+import {
+  adminAssistanceRequestsRouter,
+  adminDonationPledgesRouter,
+  adminEnquiriesRouter,
+  adminVolunteerApplicationsRouter,
+} from './modules/reviews/reviews.routes';
 import { trackingRouter } from './modules/tracking/tracking.routes';
 
 /** Everything under /api/v1. Each later step mounts its module here. */
@@ -69,6 +75,10 @@ adminRouter.use('/initiative-types', adminInitiativeTypesRouter);
 adminRouter.use('/announcements', adminAnnouncementsRouter);
 adminRouter.use('/products', adminProductsRouter);
 adminRouter.use('/product-categories', adminProductCategoriesRouter);
+adminRouter.use('/volunteer-applications', adminVolunteerApplicationsRouter);
+adminRouter.use('/assistance-requests', adminAssistanceRequestsRouter);
+adminRouter.use('/donation-pledges', adminDonationPledgesRouter);
+adminRouter.use('/enquiries', adminEnquiriesRouter);
 // Later steps add more admin modules here.
 
 apiRouter.use('/admin', adminRouter);

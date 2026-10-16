@@ -12,6 +12,7 @@ Built so far, following the build guide:
 - **Phase 2, Step 9:** the shop: products, sizes with stock, categories and product photos.
 - **Phase 3, Step 10:** the four public forms (volunteer, donation pledge, request help, enquiry), with reference numbers and confirmation emails.
 - **Phase 3, Step 11:** "Track my request": the status of a volunteer application, pledge or request for help, from its reference number and phone digits.
+- **Phase 3, Step 12:** the admin review queues: accept or decline volunteers, requests for help and pledges (with a decision email), record attendance, close requests, mark enquiries reviewed.
 
 ## Requirements
 
@@ -289,6 +290,38 @@ A match replies `200` with:
 - **5 wrong attempts per IP address per 15 minutes**, then `429`. Correct attempts don't count.
 - Enquiries have no reference number, so they can't be tracked.
 
+## Review queues (admin)
+
+Staff and super admins. Every list takes `page`, `pageSize`, `search`, `from` and `to` (days as `YYYY-MM-DD`, in Johannesburg time), `status` (one of the statuses below, or `all`, the default) and `sort`. A filter or sort it doesn't understand is ignored, so the full list shows instead of an error. Replies hold contact details, so they are never cached.
+
+| Request | Filters | `sort` (default `newest`) |
+| --- | --- | --- |
+| `GET /admin/volunteer-applications` | `initiativeId`, `taskId` | `newest`, `oldest`, `name`, `status`, `event` |
+| `GET /admin/volunteer-applications/:id` | | |
+| `GET /admin/assistance-requests` | `requestType` | `newest`, `oldest`, `name`, `status`, `type` |
+| `GET /admin/assistance-requests/:id` | | |
+| `GET /admin/donation-pledges` | `category`, `initiativeId` | `newest`, `oldest`, `name`, `status`, `value` |
+| `GET /admin/enquiries` | `enquiryType` | `newest`, `oldest`, `name`, `status` |
+
+`search` looks in the name, email, reference number and phone number (`071 234 5678` finds `+27712345678`); for enquiries also the message.
+
+Each item has the person's details, `status`, `submittedAt`, `reviewedAt`, `reviewedBy` (`{ adminId, fullName }`) and `decisionReason`. Volunteer applications also have `initiative` and `task: { taskId, name, volunteersNeeded, accepted }`, so the dashboard can show "3 of 6 accepted" for each task. Pledges have `estimatedValue` (`"R1 200.00"`) and `estimatedValueCents`.
+
+**Decisions** follow the Task 1 state machines. Nothing moves backwards, and a final decision can't be changed (`409` with a plain explanation):
+
+| Request | Body `status` | Moves allowed |
+| --- | --- | --- |
+| `PATCH /admin/volunteer-applications/:id/decision` | `Accepted`, `Declined`, `Attended`, `Did not attend` | Submitted → Accepted or Declined; Accepted → Attended or Did not attend (from the event's first day) |
+| `PATCH /admin/assistance-requests/:id/decision` | `Approved`, `Declined`, `Closed` | Submitted or Under review → Approved or Declined; Fulfilled → Closed |
+| `PATCH /admin/donation-pledges/:id/status` | `Accepted`, `Declined` | Pending → Accepted or Declined |
+| `PATCH /admin/enquiries/:id/status` | `New`, `Reviewed` | Either way (no email) |
+
+- **Declining needs a `reason`** (3 to 500 characters), or the reply is `400` on the `reason` field. The person sees the reason in their email; tracking never shows it.
+- **Opening a request** (`GET /admin/assistance-requests/:id`) moves it from Submitted to Under review, as in Task 1 use case UC-03, and records who opened it.
+- **Fulfilled** (requests) and **Received** (pledges) are recorded together with the stock and donation records in step 13.
+- Every decision saves who made it and when, writes an `audit_log` row, and shows up in tracking at once. Accepting, approving and declining also email the person, if they gave an email address.
+- If two admins decide on the same submission at the same moment, one decision is saved and the other gets `409`.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -343,6 +376,8 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 10: an unreachable mail server is retried 3 times, then logged; the form is saved and answered straight away | `tests/unit/email.test.ts` (and by hand, below) |
 | Step 11: the right reference and digits return the status; a wrong reference and wrong digits give identical replies | `tests/integration/tracking.test.ts` |
 | Step 11: the reply holds no personal details; the 6th wrong attempt gets 429 | `tests/integration/tracking.test.ts`, `tests/unit/tracking.test.ts` |
+| Step 12: declining without a reason gets 400; deciding an already decided submission gets 409 | `tests/integration/reviews.test.ts`, `tests/unit/reviews.test.ts` |
+| Step 12: the person gets the decision email and tracking shows the new status; every decision records the admin and an audit row | `tests/integration/reviews.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
@@ -410,3 +445,4 @@ Migration `001` creates the ten Task 1 tables exactly as Section 8 designs them.
 | 004 | One pending volunteer application per phone number per initiative | Stops duplicate applications |
 | 005 | `ADMIN_USER`: session version, last authenticator code used; `REFRESH_TOKEN`: revoke reason | Ending all sessions at once, codes that work only once, detecting a copied refresh token |
 | 006 | `ADMIN_USER`: one account per email address; two more revoke reasons (2FA reset, password reset) | Admin management |
+| 007 | `VOLUNTEER_APPLICATION`: decision reason; a declined application, request or pledge must have a reason | Task 1 requires a reason to decline (Section 7.6); the decision email includes it |

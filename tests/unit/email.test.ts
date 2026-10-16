@@ -11,9 +11,11 @@ import {
   sendEmail,
 } from '../../src/services/email';
 import {
+  assistanceRequestDeclined,
   donationPledgeReceived,
   enquiryReceived,
   escapeHtml,
+  volunteerApplicationAccepted,
   volunteerApplicationReceived,
 } from '../../src/services/emailTemplates';
 
@@ -164,5 +166,32 @@ describe('email templates', () => {
     expect(email.subject).toBe('We have received your enquiry');
     expect(email.text).toContain('partnering with us');
     expect(email.text).not.toMatch(/reference number/i);
+  });
+
+  it('tells people the decision, with the reason when declined', () => {
+    const accepted = volunteerApplicationAccepted({
+      to: 'sipho@example.com',
+      name: 'Sipho Dlamini',
+      referenceNumber: 'VOL-7K3P9X',
+      eventTitle: 'Community clothing drive',
+      eventDate: '24 Oct 2026',
+      eventTime: '10:00–14:00 SAST',
+      location: null,
+      taskName: 'Clothing sorting',
+    });
+    expect(accepted.subject).toBe('Volunteer application accepted: VOL-7K3P9X');
+    expect(accepted.text).toContain('Task: Clothing sorting');
+    expect(accepted.text).not.toContain('Place:');
+
+    const declined = assistanceRequestDeclined({
+      to: 'thandi@example.com',
+      name: 'Thandi',
+      referenceNumber: 'REQ-AB23CD',
+      requestType: 'Blankets',
+      reason: 'No <blankets> left\nthis month.',
+    });
+    expect(declined.subject).toBe('Update on your request: REQ-AB23CD');
+    expect(declined.text).toContain('Reason: No <blankets> left this month.');
+    expect(declined.html).toContain('No &lt;blankets&gt; left this month.');
   });
 });

@@ -162,3 +162,123 @@ export function enquiryReceived(data: {
     paragraph('Our team will reply to this email address as soon as we can.'),
   ]);
 }
+
+// --- Decisions (step 12) ------------------------------------------------------------------
+
+export function volunteerApplicationAccepted(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  eventTitle: string;
+  eventDate: string;
+  eventTime: string | null;
+  location: string | null;
+  taskName: string | null;
+}): EmailMessage {
+  return build(data.to, `Volunteer application accepted: ${data.referenceNumber}`, data.name, [
+    paragraph(`Good news: your application to volunteer with ${ORGANISATION} has been accepted.`),
+    details([
+      ['Reference', data.referenceNumber],
+      ['Event', data.eventTitle],
+      ['Date', data.eventDate],
+      ['Time', data.eventTime],
+      ['Place', data.location],
+      ['Task', data.taskName],
+    ]),
+    paragraph('Thank you for giving your time. The team will contact you if anything changes.'),
+  ]);
+}
+
+export function volunteerApplicationDeclined(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  eventTitle: string;
+  reason: string;
+}): EmailMessage {
+  const subject = `Update on your volunteer application: ${data.referenceNumber}`;
+  return build(data.to, subject, data.name, [
+    paragraph(
+      `Thank you for offering to volunteer at ${oneLine(data.eventTitle)}. ` +
+        "Unfortunately we can't accept your application this time.",
+    ),
+    details([
+      ['Reference', data.referenceNumber],
+      ['Reason', data.reason],
+    ]),
+    paragraph('We hope you will apply for one of our future events.'),
+  ]);
+}
+
+export function assistanceRequestApproved(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  requestType: string;
+}): EmailMessage {
+  return build(data.to, `Request approved: ${data.referenceNumber}`, data.name, [
+    paragraph('Your request for help has been approved.'),
+    details([
+      ['Reference', data.referenceNumber],
+      ['Help with', data.requestType],
+    ]),
+    paragraph('Our team will contact you about the next steps.'),
+  ]);
+}
+
+export function assistanceRequestDeclined(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  requestType: string;
+  reason: string;
+}): EmailMessage {
+  return build(data.to, `Update on your request: ${data.referenceNumber}`, data.name, [
+    paragraph("Thank you for contacting us. Unfortunately we're unable to help with this request."),
+    details([
+      ['Reference', data.referenceNumber],
+      ['Help with', data.requestType],
+      ['Reason', data.reason],
+    ]),
+    paragraph('If your situation changes, you are welcome to send a new request.'),
+  ]);
+}
+
+export function donationPledgeAccepted(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  category: string;
+  eventTitle: string | null;
+}): EmailMessage {
+  return build(data.to, `Donation pledge accepted: ${data.referenceNumber}`, data.name, [
+    paragraph('Thank you! Your donation pledge has been accepted.'),
+    details([
+      ['Reference', data.referenceNumber],
+      ['Donation type', data.category],
+      ['For', data.eventTitle],
+    ]),
+    paragraph(
+      'Our team will contact you to arrange the donation. ' +
+        'No payment is collected by email or through the app.',
+    ),
+  ]);
+}
+
+export function donationPledgeDeclined(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  category: string;
+  reason: string;
+}): EmailMessage {
+  return build(data.to, `Update on your donation pledge: ${data.referenceNumber}`, data.name, [
+    paragraph("Thank you for your generous offer. Unfortunately we're unable to accept it."),
+    details([
+      ['Reference', data.referenceNumber],
+      ['Donation type', data.category],
+      ['Reason', data.reason],
+    ]),
+    paragraph('We hope you will consider supporting one of our future drives.'),
+  ]);
+}
