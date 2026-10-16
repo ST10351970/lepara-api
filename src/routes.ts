@@ -50,6 +50,7 @@ import {
   adminStockItemsRouter,
   adminStockMovementsRouter,
 } from './modules/stock/stock.routes';
+import { adminDashboardRouter, adminReportsRouter } from './modules/reports/reports.routes';
 import { trackingRouter } from './modules/tracking/tracking.routes';
 
 /** Everything under /api/v1. Each later step mounts its module here. */
@@ -112,6 +113,8 @@ adminRouter.use('/stock-items', adminStockItemsRouter);
 adminRouter.use('/stock-movements', adminStockMovementsRouter);
 adminRouter.use('/donations', adminDonationsRouter);
 adminRouter.use('/orders', adminOrdersRouter);
+adminRouter.use('/dashboard', adminDashboardRouter);
+adminRouter.use('/reports', adminReportsRouter);
 // Later steps add more admin modules here.
 
 apiRouter.use('/admin', adminRouter);

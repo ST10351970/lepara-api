@@ -484,6 +484,27 @@ Push notifications stay off (and everything else works) until this is done. One 
 
 To try it on your own machine, put the same value in `.env` as `FIREBASE_SERVICE_ACCOUNT=...`. Without it, `npm run dev` logs "Push notifications are off".
 
+## Dashboard and reports (admin)
+
+For the dashboard; any signed-in admin. These match the Reporting Component in Task 1 Section 6.3 (donations received over a period, current stock levels, assistance requests by status, volunteer participation per initiative), plus the shop's sales.
+
+| Request | What it gives |
+| --- | --- |
+| `GET /admin/dashboard` | The numbers for the dashboard's tiles: requests waiting for a decision and approved ones to fulfil, volunteer applications and pledges waiting, new enquiries, low-stock items (with the 5 furthest below their reorder level), orders awaiting payment, to pack, to ship and on the way, upcoming initiatives, and donations this month |
+| `GET /admin/reports/donations?from=&to=&type=&initiativeId=` | Donations received: count, donors, money total and average, goods; per initiative; goods per stock item. Voided donations are left out. `type` is `Monetary` or `Goods` |
+| `GET /admin/reports/stock?from=&to=` | Every stock item: on hand now, reorder level, low or not, and for the dates: opening, received from donations, removed by voided donations, given out, adjusted, closing (opening + received − voided − given out + adjusted = closing) |
+| `GET /admin/reports/assistance-requests?from=&to=` | Requests submitted, by type and status, with the % of decided requests that were approved. Counts only, no personal details |
+| `GET /admin/reports/initiatives?from=&to=` | Each published or closed initiative running in the dates: volunteer applications, waiting, accepted, attended, did not attend, declined, attendance %, and donations for it |
+| `GET /admin/reports/initiatives/:id` | One initiative, whatever the dates: the same totals, volunteers per task, donated goods per item and pledges by status |
+| `GET /admin/reports/sales?from=&to=` | Shop orders placed: counts, items sold, sales (goods and delivery), paid, unpaid and refunded, average order; by status, by payment method and by product and size. Cancelled orders are counted but not added to the sales |
+
+- **Dates** are `YYYY-MM-DD`, whole days in Johannesburg, both included. Without dates a report covers this month so far. `from` after `to` gets `400` on `to`. A range with nothing in it returns zeros, never an error.
+- **Amounts** are given as `{ cents, label }`, for example `{ "cents": 125050, "label": "R1 250.50" }`: add up the cents, show the label.
+- **Percentages** are numbers from 0 to 100 with one decimal, and 0 when there is nothing to divide by.
+- **`?format=csv`** on any report downloads it as a spreadsheet (`Content-Disposition: attachment`). The donations CSV lists each donation, the sales CSV each order, the stock CSV each item, and the others their table. Text that starts with `=`, `+`, `-` or `@` gets a `'` in front so Excel shows it as text instead of running it as a formula. Amounts are plain numbers Excel can add up.
+- **Every total is worked out by the database** (`COUNT`, `SUM` and `AVG` in SQL), not added up in code.
+- **Not in the reports:** "stock used per initiative" from the plan. Stock leaves through assistance requests, which aren't linked to an initiative in the Task 1 design, so it can't be counted per initiative.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -556,6 +577,8 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 17: publishing an announcement reaches the phones; an order status change reaches only that customer's phones (with a pretend Firebase) | `tests/integration/devices.test.ts` |
 | Step 17: an invalid token is removed after a send; with Firebase unreachable, the announcement still publishes | `tests/integration/devices.test.ts`, `tests/unit/push.test.ts` |
 | Step 17: sends go 500 phones at a time; a failed batch doesn't stop the rest | `tests/unit/push.test.ts` |
+| Step 19: report totals match a hand count; a date range with no data returns zeros, not an error | `tests/integration/reports.test.ts` |
+| Step 19: the CSV downloads, and a donor name starting with `=` shows as plain text; an end date before the start date gets 400 | `tests/integration/reports.test.ts`, `tests/unit/reports.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
@@ -586,7 +609,7 @@ src/
                          push notifications through Firebase)
   modules/<feature>/     routes → controller → service → repository (Task 1, Section 6.2)
   schemas/common.ts      shared validation rules with user-facing messages
-  utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting,
+  utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting, CSV files,
                          authenticator codes (totp.ts), encryption and hashing (crypto.ts), audit log
 db/
   migrations/            numbered SQL files, each with an up and a down section
