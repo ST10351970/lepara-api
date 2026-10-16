@@ -41,11 +41,19 @@ export type MessagingLike = {
   }>;
 };
 
-/** FCM's answer when a device uninstalled the app or the token was never valid. */
+/**
+ * FCM's answer when a device uninstalled the app or the token was never valid.
+ * firebase-admin 14 reports the code on its own ("registration-token-not-registered");
+ * older versions put "messaging/" in front, so both are accepted.
+ */
 const INVALID_TOKEN_CODES = new Set([
-  'messaging/registration-token-not-registered',
-  'messaging/invalid-registration-token',
+  'registration-token-not-registered',
+  'invalid-registration-token',
 ]);
+
+export function isInvalidTokenError(code: string | undefined): boolean {
+  return code !== undefined && INVALID_TOKEN_CODES.has(code.replace(/^messaging\//, ''));
+}
 
 export function fcmSender(messaging: MessagingLike): PushSender {
   return async (tokens, message) => {
@@ -59,7 +67,7 @@ export function fcmSender(messaging: MessagingLike): PushSender {
     return reply.responses.map((response, index) => ({
       token: tokens[index]!,
       ok: response.success,
-      invalidToken: !response.success && INVALID_TOKEN_CODES.has(response.error?.code ?? ''),
+      invalidToken: !response.success && isInvalidTokenError(response.error?.code),
       ...(response.error ? { error: response.error.code } : {}),
     }));
   };

@@ -8,6 +8,7 @@ import {
   deliverPush,
   fcmSender,
   getPushSender,
+  isInvalidTokenError,
 } from '../../src/services/push';
 
 // A made-up key file: the API only checks its shape before handing it to Firebase.
@@ -67,7 +68,7 @@ describe('sending through Firebase', () => {
             { success: true },
             {
               success: false,
-              error: { code: 'messaging/registration-token-not-registered', message: 'gone' },
+              error: { code: 'registration-token-not-registered', message: 'gone' },
             },
             { success: false, error: { code: 'messaging/internal-error', message: 'try later' } },
           ],
@@ -89,6 +90,15 @@ describe('sending through Firebase', () => {
       ['b', false, true],
       ['c', false, false],
     ]);
+  });
+
+  it('spots an uninstalled app in the codes of firebase-admin 14 and older versions', () => {
+    expect(isInvalidTokenError('registration-token-not-registered')).toBe(true);
+    expect(isInvalidTokenError('messaging/registration-token-not-registered')).toBe(true);
+    expect(isInvalidTokenError('invalid-registration-token')).toBe(true);
+    expect(isInvalidTokenError('messaging/invalid-argument')).toBe(false);
+    expect(isInvalidTokenError('internal-error')).toBe(false);
+    expect(isInvalidTokenError(undefined)).toBe(false);
   });
 
   it('sends 500 at a time, and a failed batch never stops the rest', async () => {

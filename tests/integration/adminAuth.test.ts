@@ -394,6 +394,19 @@ describe.skipIf(!hasTestDatabase)('admin sign-in', () => {
     expect(website.status).toBe(200);
   });
 
+  it("accepts sign-in requests from the API's own docs page (/api/docs)", async () => {
+    const docsPage = await request(app)
+      .post(`${api}/auth/logout`)
+      .set('Host', 'lepara-api.example.test')
+      .set('Origin', 'http://lepara-api.example.test');
+    expect(docsPage.status).toBe(200);
+    const lookalike = await request(app)
+      .post(`${api}/auth/logout`)
+      .set('Host', 'lepara-api.example.test')
+      .set('Origin', 'http://lepara-api.example.test.evil.example');
+    expect(lookalike.status).toBe(403);
+  });
+
   it('refuses a deactivated admin', async () => {
     const { adminId, username } = await createAdmin();
     await testQuery('UPDATE admin_user SET is_active = false WHERE admin_id = $1', [adminId]);

@@ -21,7 +21,8 @@
     "migrate:down": "tsx db/migrate.ts down",
     "migrate:status": "tsx db/migrate.ts status",
     "seed": "tsx db/seeds/seed.ts",
-    "seed:sample": "tsx db/seeds/seed.ts --sample"
+    "seed:sample": "tsx db/seeds/seed.ts --sample",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.34.0",
@@ -40,6 +41,8 @@
     "pino": "^9.7.0",
     "pino-http": "^10.5.0",
     "qrcode": "^1.5.4",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.9.1",
     "zod": "^4.1.0"
   },
   "devDependencies": {
@@ -54,6 +57,8 @@
     "@types/pg": "^8.15.4",
     "@types/qrcode": "^1.5.6",
     "@types/supertest": "^6.0.3",
+    "@types/swagger-ui-express": "^4.1.8",
+    "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^9.30.0",
     "pino-pretty": "^13.0.0",
     "prettier": "^3.6.0",

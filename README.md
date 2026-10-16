@@ -2,19 +2,41 @@
 
 The back end for the Lepara Ale fele Moya mobile app and website: Node.js, Express 5, TypeScript and a cloud PostgreSQL database. One API serves both apps; the admin dashboard on the website uses the `/api/v1/admin` routes added in later phases.
 
-Built so far, following the build guide:
+Built so far:
 
-- **Phase 1 (Foundation):** the project skeleton, the app shell with error handling, the database migrations and seeds, the shared building blocks, tests and CI.
-- **Phase 2, Step 5:** admin sign-in with an authenticator app (two-factor authentication), sessions, lockout and password change.
-- **Phase 2, Step 6:** admin user management: super admins add, edit and deactivate admins, and reset a lost authenticator or a forgotten password.
-- **Phase 2, Step 7:** events: the public event list and pages for the app, event types, volunteer tasks, and photo uploads to Azure Blob Storage.
-- **Phase 2, Step 8:** announcements for the app's News screen.
-- **Phase 2, Step 9:** the shop: products, sizes with stock, categories and product photos.
-- **Phase 3, Step 10:** the four public forms (volunteer, donation pledge, request help, enquiry), with reference numbers and confirmation emails.
-- **Phase 3, Step 11:** "Track my request": the status of a volunteer application, pledge or request for help, from its reference number and phone digits.
-- **Phase 3, Step 12:** the admin review queues: accept or decline volunteers, requests for help and pledges (with a decision email), record attendance, close requests, mark enquiries reviewed.
-- **Phase 3, Step 13:** donations and stock: recording and voiding donations, stock items and adjustments, receiving pledges, and fulfilling requests from stock.
-- **Phase 4, Step 14:** customer accounts for the shop: sign-up with an emailed code, sign-in (with optional emailed login codes), sessions, profile, password change and reset, and account deletion.
+- The project skeleton, the app shell with error handling, the database migrations and seeds, the shared building blocks, tests and CI.
+- Admin sign-in with an authenticator app (two-factor authentication), sessions, lockout and password change.
+- Admin user management: super admins add, edit and deactivate admins, and reset a lost authenticator or a forgotten password.
+- Events: the public event list and pages for the app, event types, volunteer tasks, and photo uploads to Azure Blob Storage.
+- Announcements for the app's News screen.
+- The shop: products, sizes with stock, categories and product photos.
+- The four public forms (volunteer, donation pledge, request help, enquiry), with reference numbers and confirmation emails.
+- "Track my request": the status of a volunteer application, pledge or request for help, from its reference number and phone digits.
+- The admin review queues: accept or decline volunteers, requests for help and pledges (with a decision email), record attendance, close requests, mark enquiries reviewed.
+- Donations and stock: recording and voiding donations, stock items and adjustments, receiving pledges, and fulfilling requests from stock.
+- Customer accounts for the shop: sign-up with an emailed code, sign-in (with optional emailed login codes), sessions, profile, password change and reset, and account deletion.
+- The cart and orders: a checkout quote, placing an order (EFT or cash on delivery) without overselling, the customer's Orders tab and cancelling.
+- Orders for admins: recording payments, packing, shipping, delivery and cancelling, with an email at each step.
+- Push notifications through Firebase Cloud Messaging: news to every phone, order updates to the customer's phones.
+- The shop takes EFT and cash on delivery.
+- The admin dashboard numbers and five reports, as JSON or a CSV download.
+- Hardening: tuned rate limits, security tests, the API documentation (Swagger UI and a Postman collection), test coverage in CI, and the final deployment.
+
+Step 18 (PayFast card payments) was left out by decision: the shop takes EFT and cash on delivery.
+
+## Live API and documentation
+
+| What | Where |
+| --- | --- |
+| Live API | `https://lepara-api.onrender.com/api/v1` (health check: `/api/v1/health`) |
+| API documentation | `https://lepara-api.onrender.com/api/docs`: every endpoint with an example request and reply, and **Try it out** |
+| OpenAPI file | [`docs/openapi.yaml`](docs/openapi.yaml), also served at `/api/openapi.yaml` and `/api/openapi.json` |
+| Postman collection | [`docs/lepara-api.postman_collection.json`](docs/lepara-api.postman_collection.json): import it in Postman (**Import**, then choose the file) |
+| Test accounts | In the private submission, not in this public repository. See [Test accounts](#test-accounts) for how to sign in |
+
+The live API runs on Render's free plan, so after 15 minutes without requests it goes to sleep: the first request then takes up to a minute. Open `/api/v1/health` first and wait for `"status": "ok"`.
+
+Running the API on your own computer takes about 15 minutes: follow [First-time setup](#first-time-setup) below. The documentation is then at http://localhost:3000/api/docs.
 
 ## Requirements
 
@@ -70,7 +92,14 @@ npm run seed                # live database: reference data and first super admi
 npm run dev
 ```
 
-Open http://localhost:3000/api/v1/health. You should see `"status": "ok"` and `"database": "up"`.
+Open http://localhost:3000/api/v1/health. You should see `"status": "ok"` and `"database": "up"`. The API documentation is at http://localhost:3000/api/docs.
+
+**6. Run the tests**
+
+```bash
+npm test                    # needs TEST_DATABASE_URL (step 2); the test database is emptied each run
+npm run test:coverage       # the same, plus a coverage report in coverage/index.html
+```
 
 ## Scripts
 
@@ -79,6 +108,7 @@ Open http://localhost:3000/api/v1/health. You should see `"status": "ok"` and `"
 | `npm run dev` | Runs the API and restarts it when you save a file |
 | `npm run build` / `npm start` | Compiles to `dist/` / runs the compiled API |
 | `npm test` | Runs all tests (database tests need `TEST_DATABASE_URL`) |
+| `npm run test:coverage` | Runs all tests and reports which lines of `src/` they run (`coverage/index.html`) |
 | `npm run typecheck` / `npm run lint` | TypeScript and ESLint checks |
 | `npm run migrate:up` | Applies migrations not yet applied |
 | `npm run migrate:down` | Undoes the last migration (`-- 2` for two, `-- all` for everything in development) |
@@ -524,6 +554,63 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 - **Rules:** usernames and emails must be unique, and usernames can't be changed later. Nobody can deactivate themselves or change their own role. There is always at least one active super admin; a request that would remove the last one gets `409`.
 - **Audit log:** every change writes a row to `audit_log` saying which super admin did what to which admin.
 
+## Test accounts
+
+This repository is public, so the usernames and passwords are in the **private submission**, not here. There are two accounts on the live API:
+
+| Account | What it can do |
+| --- | --- |
+| **Admin** (`super_admin`) | Everything under `/api/v1/admin`: events, news, reviews, stock, donations, products, orders, reports and admin accounts |
+| **Customer** | The app's shop: sign in, profile, place and cancel orders. The email is already confirmed and login codes are off |
+
+**Signing in as the admin for the first time** (about 3 minutes; you need a phone with Google Authenticator or Microsoft Authenticator). The account starts with a temporary password, and you set up the authenticator app yourself, so the second step of sign-in is on your own phone. All of this works in the API documentation (`/api/docs`): open each request, click **Try it out**, fill it in and click **Execute**.
+
+1. `POST /admin/auth/login` with the username and temporary password. Copy `pendingToken` from the reply.
+2. `POST /admin/auth/2fa/setup` with that `pendingToken`. Copy the whole `qrCodeDataUrl` value (it starts with `data:image/png`), paste it into a new browser tab's address bar, and scan the QR code with the authenticator app. (Or type `manualEntryKey` into the app.)
+3. `POST /admin/auth/2fa/confirm` with the `pendingToken` and the 6-digit code from the app. The reply has 10 backup codes: keep one in case.
+4. Copy `accessToken` from the reply, click **Authorize** at the top of the page, paste it under **adminBearer** and click **Authorize**.
+5. `PATCH /admin/me/password` to choose your own password (the other admin endpoints answer `403 PASSWORD_CHANGE_REQUIRED` until you do). The reply has a new `accessToken`: authorize with that one.
+
+**Later sign-ins:** `POST /admin/auth/login`, then `POST /admin/auth/2fa/verify` with the `pendingToken` and a code from the app. An access token lasts 15 minutes; after that, sign in again (or `POST /admin/auth/refresh`).
+
+**Signing in as the customer:** `POST /auth/login` with the email and password, then authorize with the `accessToken` under **customerBearer**. To make a new customer instead, use `POST /auth/register` with an email address you can read: the 6-digit code arrives by email.
+
+In Postman the steps are the same, and the collection saves each token for the requests that need it (see the collection's description).
+
+## Security
+
+How each item in the security plan is handled, and where it is proved:
+
+| Concern | What the API does | Proof |
+| --- | --- | --- |
+| SQL injection | Every query uses placeholders (`$1`, `$2`); no SQL is built from user text. Sort orders come from a fixed list (`pickSort`); `%` and `_` in a search are ordinary characters. The live API connects as `lepara_app`, which cannot drop tables or delete records | `tests/integration/security.test.ts` sends `' OR 1=1 --` and others into both sign-ins, tracking and six admin searches: each gets a normal 400, 401 or empty list, and no table changes. By hand: `DROP TABLE donation;` as `lepara_app` fails |
+| Password storage | bcrypt, cost 12. Never logged and never in a reply | `tests/unit/logger.test.ts`; the `password_hash` column holds only `$2b$12$...` values |
+| Password rules | At least 8 characters with a letter and a number, not on the common-password list, must match the confirm field | `tests/unit/schemas.test.ts` |
+| Brute-force sign-in | 5 wrong passwords (or codes) lock the account for 15 minutes; sign-in is limited to 10 tries per address per 15 minutes; the same "email or password is incorrect" message either way | `tests/integration/adminAuth.test.ts` and `customerAuth.test.ts` (the 6th attempt gets 423), `requestHandling.test.ts` (429) |
+| Admin 2FA | Required for every admin: authenticator-app codes (TOTP, RFC 6238), each usable once; the secret encrypted with AES-256-GCM; 10 backup codes stored as hashes | `tests/integration/adminAuth.test.ts`, `tests/unit/totp.test.ts`, `tests/unit/crypto.test.ts` |
+| Customer 2FA | A 6-digit emailed code to confirm the email, and optionally at every sign-in; stored as a hash, valid 10 minutes, single use, 5 tries | `tests/integration/customerAuth.test.ts`, `tests/unit/customerAuth.test.ts` |
+| Tokens | Access tokens are JWTs for 15 minutes. Refresh tokens are random, stored as hashes, 7 days for customers and 12 hours for admins, replaced on every use; an old one used again signs that person out everywhere. Admin and customer tokens use different secrets | `tests/integration/adminAuth.test.ts`, `customerAuth.test.ts` (rotation, reuse, a customer token refused on `/admin`), `tests/unit/adminTokens.test.ts` |
+| Token storage | The app keeps the refresh token in expo-secure-store; the website keeps the access token in memory and gets the refresh token as an httpOnly, Secure, SameSite cookie | `tests/integration/customerAuth.test.ts` (cookie, never in the body) |
+| Access control | Admin routes need an admin token, and admin accounts need the super admin role. A customer's queries always use the customer ID from the token, so customer B gets 404 for customer A's order | `tests/integration/adminUsers.test.ts` (403 for staff), `orders.test.ts` |
+| Data integrity | Foreign keys, CHECK and UNIQUE constraints; multi-table changes in transactions with row locks; totals worked out by the server from database prices; an audit log; nothing is hard-deleted (donations are voided, orders cancelled) | `tests/integration/database.test.ts`, `stock.test.ts`, `orders.test.ts` (two orders for the last item at once) |
+| Request hygiene | helmet headers (HSTS, CSP, nosniff), CORS only for the addresses in `CORS_ORIGINS`, a 100 KB body limit, unknown fields removed, text length limits, rate limits | `tests/integration/security.test.ts`, `app.test.ts`, `requestHandling.test.ts` |
+| File uploads | JPEG, PNG or WebP only, checked from the file's contents; at most 2 MB; random file names; stored in Azure Blob Storage, not on the API server | `tests/integration/initiatives.test.ts` (a renamed file gets 415, a large one 413) |
+| Secrets | `.env` is in `.gitignore`; `.env.example` holds placeholders only; real values are in Render's settings; GitHub secret scanning and push protection are on | The repository holds no keys |
+| Transport | HTTPS only (Render), with HSTS; SSL to the database (`DATABASE_SSL=true`) | `tests/integration/security.test.ts` (HSTS header); the padlock in the browser |
+| Payments | No card details ever reach the API: EFT payments are checked against the bank statement and recorded by an admin, cash is recorded on delivery | `tests/integration/adminOrders.test.ts` (the amount must equal the order total) |
+| POPIA | Consent stored with a time; only the needed fields collected; tracking shows no personal details; emails, phone numbers and tokens hidden in logs; customers can delete their account | `tests/integration/database.test.ts` (consent), `tracking.test.ts`, `tests/unit/logger.test.ts`, `customerAuth.test.ts` (deletion) |
+| Failure handling | One error handler gives every failure the same envelope; a failing email or push service never fails a request | `tests/integration/app.test.ts`, `emailFailure.test.ts`, `devices.test.ts` |
+
+**Rate limits** (per IP address; `TRUST_PROXY=1` on Render makes the API see the visitor's real address):
+
+| Limit | Applies to |
+| --- | --- |
+| 900 requests per 15 minutes | Every request except `/api/v1/health`, as a ceiling against floods. Raised from 300 in Step 20: a school or office shares one address, and one dashboard page makes several requests. Render's health checks never count |
+| 10 per 15 minutes | Admin and customer sign-in |
+| 10 per 15 minutes | Entering and requesting 6-digit codes |
+| 5 per 10 minutes | The public forms |
+| 5 wrong attempts per 15 minutes | Tracking (right answers don't count) |
+
 ## Checking each step
 
 `npm test` covers the "Done when" checks in the build guide:
@@ -556,7 +643,7 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 9: stock shows as In stock, Low stock or Sold out; sizes and SKU codes are unique | `tests/integration/products.test.ts`, `tests/unit/products.test.ts` |
 | Step 10: each form returns a reference number and emails it; a draft or ended event gets a friendly refusal; the 6th form in 10 minutes gets 429; an unticked consent box gets 400 on `consent` | `tests/integration/submissions.test.ts`, `tests/unit/submissions.test.ts` |
 | Step 10: a filled-in spam-trap field gets a pretend success and saves nothing | `tests/integration/submissions.test.ts`, `tests/unit/submissions.test.ts` |
-| Step 10: an unreachable mail server is retried 3 times, then logged; the form is saved and answered straight away | `tests/unit/email.test.ts` (and by hand, below) |
+| Step 10: an unreachable mail server is retried 3 times, then logged; the form is saved and answered straight away | `tests/unit/email.test.ts`, `tests/integration/emailFailure.test.ts` (and by hand, below) |
 | Step 11: the right reference and digits return the status; a wrong reference and wrong digits give identical replies | `tests/integration/tracking.test.ts` |
 | Step 11: the reply holds no personal details; the 6th wrong attempt gets 429 | `tests/integration/tracking.test.ts`, `tests/unit/tracking.test.ts` |
 | Step 12: declining without a reason gets 400; deciding an already decided submission gets 409 | `tests/integration/reviews.test.ts`, `tests/unit/reviews.test.ts` |
@@ -567,6 +654,7 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 14: register, the code arrives, verify, signed in; registering an existing email gets the same reply as a new one | `tests/integration/customerAuth.test.ts` |
 | Step 14: five wrong codes end that code; a resend within 60 seconds gets 429; signing in unverified gets `EMAIL_NOT_VERIFIED` | `tests/integration/customerAuth.test.ts`, `tests/unit/customerAuth.test.ts` |
 | Step 14: changing the password signs out other devices; a customer token on an `/admin` route gets 401 | `tests/integration/customerAuth.test.ts`, `tests/unit/customerAuth.test.ts` |
+| Step 14: the 5th wrong password locks the account and the 6th attempt gets 423; a copied old refresh token signs out everywhere | `tests/integration/customerAuth.test.ts` |
 | Step 15: a price changed in the request has no effect on the total; the quote total equals the order total | `tests/integration/orders.test.ts`, `tests/unit/orders.test.ts` |
 | Step 15: two orders at once for the last size M hoodie: one succeeds, the other gets 409 | `tests/integration/orders.test.ts` |
 | Step 15: repeating a request with the same Idempotency-Key creates no second order | `tests/integration/orders.test.ts`, `tests/unit/orders.test.ts` |
@@ -579,6 +667,15 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 17: sends go 500 phones at a time; a failed batch doesn't stop the rest | `tests/unit/push.test.ts` |
 | Step 19: report totals match a hand count; a date range with no data returns zeros, not an error | `tests/integration/reports.test.ts` |
 | Step 19: the CSV downloads, and a donor name starting with `=` shows as plain text; an end date before the start date gets 400 | `tests/integration/reports.test.ts`, `tests/unit/reports.test.ts` |
+| Step 20: injection strings in sign-in, tracking and admin searches are refused normally and change no data | `tests/integration/security.test.ts` |
+| Step 20: HSTS, CSP and the other security headers are sent | `tests/integration/security.test.ts` |
+| Step 20: `/api/docs` and the OpenAPI file are served; every route in the code is documented with an example reply | `tests/integration/security.test.ts` |
+| Step 20: the documentation page's "Try it out" can sign in (the API's own address is trusted), other websites still can't | `tests/integration/adminAuth.test.ts` |
+| Step 20: a mail service that refuses every email doesn't stop a form being saved and answered | `tests/integration/emailFailure.test.ts` |
+| Step 20: an uninstalled app's push token is recognised in the error codes of firebase-admin 14 and older versions | `tests/unit/push.test.ts` |
+| Step 20: CI runs `npm audit` (no high-severity problems), lint, type checks, all tests with coverage, and the build | `.github/workflows/ci.yml`; the coverage report is under **Actions**, in each run's **Artifacts** |
+
+**Keeping the documentation up to date:** `docs/openapi.yaml` was generated from the API itself: each example reply was produced by running the example request against a test database. When a route is added or changed, update its entry in `docs/openapi.yaml` (and the Postman collection); `security.test.ts` fails if a route in the code has no entry.
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
@@ -595,6 +692,19 @@ To check by hand that the app user cannot drop a table, connect as `lepara_app` 
 
 Run `npm run migrate:up` from your own machine, with `MIGRATION_DATABASE_URL` pointing at the cloud database, before deploying code that needs new tables.
 
+### Final deployment checklist
+
+1. **CI is green:** on GitHub, **Actions** shows a green tick for the latest push to `main`.
+2. **Backup first:** in Neon, open the project, then **Branches**, **New branch**, from the main branch, named `before-final-deploy`. It is a copy of all the data at that moment, to go back to if something goes wrong. (Neon also keeps a short history it can restore from, but a named branch doesn't expire.)
+3. **Migrations:** `npm run migrate:status` with `MIGRATION_DATABASE_URL` set to the live database (`lepara_live`, as the owner). Every migration up to `008` should be applied; if any is pending, run `npm run migrate:up`.
+4. **Reference data only:** `npm run seed` (never `seed:sample` on the live database: it adds placeholder events and products). It is safe to run again.
+5. **Settings on Render:** check the environment variables listed above. When the website has its final address, set `CORS_ORIGINS` to it (several addresses are separated by commas).
+6. **Deploy:** Render deploys each push to `main` by itself. Wait for "Live", then open `/api/v1/health` and `/api/docs`.
+7. **Read the first logs:** in Render, **Logs**. Look for the start-up line, the email service line ("Emails are sent through Brevo's web API") and no `ERROR` lines after a few requests.
+8. **Test accounts:** signed in as the first super admin, add the lecturer's admin with `POST /admin/users` (`role: "super_admin"`) and put the username and temporary password in the private submission. Register a customer with an email address you can read, confirm it with the emailed code, and put the email and password in the private submission.
+9. **Real content:** add the shop's real products and opening stock with the admin endpoints (`/api/docs` or Postman), and the first events and news.
+10. **On GitHub:** **Settings → Code security**: check that **Secret scanning** and **Push protection** are on.
+
 ## How the code is organised
 
 ```
@@ -602,6 +712,7 @@ src/
   server.ts              starts the server, shuts down cleanly
   app.ts                 middleware order, routes, error handler
   routes.ts              mounts each module under /api/v1
+  docs.ts                serves the API documentation at /api/docs
   config/                environment check, database pool and transactions
   middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles,
                          photo uploads, the forms' spam trap, Idempotency-Key for orders
@@ -615,6 +726,9 @@ db/
   migrations/            numbered SQL files, each with an up and a down section
   seeds/                 reference and sample data
   setup/                 the limited app user
+docs/
+  openapi.yaml           the API documentation (OpenAPI 3.1), shown at /api/docs
+  lepara-api.postman_collection.json   every request, for Postman
 tests/
   unit/                  pure logic, no database
   integration/           the HTTP app and the database

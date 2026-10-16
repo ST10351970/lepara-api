@@ -151,6 +151,14 @@ function getMailer(): Promise<Mailer | null> {
   return mailer;
 }
 
+/**
+ * Tests only: send every email through this pretend mail service, to prove a
+ * broken one never breaks a form. null goes back to the normal choice.
+ */
+export function setMailSenderForTests(sender: MailSender | null): void {
+  mailer = sender ? Promise.resolve({ sender, from: DEVELOPMENT_FROM, kind: 'smtp' }) : undefined;
+}
+
 // --- Sending, with retries ------------------------------------------------------------
 
 type MailError = {

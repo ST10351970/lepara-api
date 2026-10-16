@@ -5,6 +5,7 @@ import express from 'express';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { env } from './config/env';
+import { docsRouter } from './docs';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 import { limiters } from './middleware/rateLimiters';
@@ -82,14 +83,20 @@ export function createApp() {
 
   // 6. A friendly reply at the bare address, so opening it in a browser isn't an error.
   app.get('/', (_req, res) => {
-    ok(res, { name: 'Lepara Ale fele Moya API', version: 'v1', health: '/api/v1/health' });
+    ok(res, {
+      name: 'Lepara Ale fele Moya API',
+      version: 'v1',
+      health: '/api/v1/health',
+      docs: '/api/docs',
+    });
   });
   app.get('/favicon.ico', (_req, res) => {
     res.status(204).end();
   });
 
-  // 7. The API itself.
+  // 7. The API itself, and its documentation at /api/docs.
   app.use('/api/v1', apiRouter);
+  app.use('/api', docsRouter());
 
   // 8. Unknown paths, then the one error handler.
   app.use(notFound);

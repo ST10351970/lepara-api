@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app';
 import { closePool } from '../../src/config/db';
+import { hashRefreshToken } from '../../src/modules/customerAuth/customerAuth.tokens';
 import type { EmailMessage } from '../../src/services/email';
 import { closeTestClient, testQuery } from '../helpers/db';
 import { hasTestDatabase } from '../setup/testDatabase';
@@ -216,6 +217,48 @@ describe.skipIf(!hasTestDatabase)('customer accounts', () => {
       .get('/api/v1/me')
       .set('Authorization', `Bearer ${changed.body.data.accessToken}`);
     expect(here.status).toBe(200);
+  });
+
+  it('locks the account after 5 wrong passwords: the sixth attempt gets 423', async () => {
+    const email = newEmail();
+    await signedUp(email);
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const wrong = await post('/auth/login', { email, password: 'Wrong-Pass-1' });
+      expect(wrong.status).toBe(401);
+      expect(wrong.body.error.message).toBe('Your email or password is incorrect.');
+    }
+    const fifth = await post('/auth/login', { email, password: 'Wrong-Pass-1' });
+    expect(fifth.status).toBe(423);
+    expect(fifth.body.error.code).toBe('ACCOUNT_LOCKED');
+
+    // While locked, even the right password is refused.
+    const sixth = await post('/auth/login', { email, password: PASSWORD });
+    expect(sixth.status).toBe(423);
+    expect(sixth.body.error.message).toMatch(/try again in 15 minutes/);
+  });
+
+  it('replaces the refresh token on every use; a copied old one signs out everywhere', async () => {
+    const first = await signedUp();
+    const refreshed = await post('/auth/refresh', { refreshToken: first.refreshToken });
+    expect(refreshed.status).toBe(200);
+    const second = refreshed.body.data as { accessToken: string; refreshToken: string };
+    expect(second.refreshToken).not.toBe(first.refreshToken);
+
+    // Someone copied the first token and uses it a minute later.
+    await testQuery(
+      `UPDATE refresh_token SET revoked_at = now() - interval '1 minute' WHERE token_hash = $1`,
+      [hashRefreshToken(first.refreshToken)],
+    );
+    const stolen = await post('/auth/refresh', { refreshToken: first.refreshToken });
+    expect(stolen.status).toBe(401);
+    expect(stolen.body.error.message).toMatch(/signed out on all devices/);
+
+    // The real session ended too.
+    expect((await post('/auth/refresh', { refreshToken: second.refreshToken })).status).toBe(401);
+    const me = await request(app)
+      .get('/api/v1/me')
+      .set('Authorization', `Bearer ${second.accessToken}`);
+    expect(me.status).toBe(401);
   });
 
   it('refuses a customer token on an admin route', async () => {

@@ -38,7 +38,25 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # Fails if any package the API depends on has a known high or critical vulnerability.
+      - name: Security audit
+        run: npm audit --audit-level=high
+
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+
+      # The tests run against the Postgres service above; the coverage report is kept
+      # with the run (Actions → the run → Artifacts → coverage-report).
+      - name: Tests with coverage
+        run: npm run test:coverage
+
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: ignore
+
       - run: npm run build
