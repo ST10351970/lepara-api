@@ -21,6 +21,15 @@ const postgresUrl = z
     'must start with postgres:// or postgresql://',
   );
 
+/** An optional setting: missing, empty or only spaces all mean "not set". */
+const optionalText = z
+  .string()
+  .optional()
+  .transform((value) => value?.trim() || undefined);
+
+const MAIL_FROM_PATTERN =
+  /^([^<>@]*<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>|[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)$/;
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -70,6 +79,33 @@ const envSchema = z
         (value) => /^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$/.test(value),
         'must be 3 to 63 lower-case letters, numbers or dashes',
       ),
+
+    // Email. Optional: with neither BREVO_API_KEY nor SMTP_HOST, development uses
+    // a test inbox at ethereal.email and the live API only logs that an email was
+    // skipped. BREVO_API_KEY sends over HTTPS, which works on Render's free plan
+    // (it blocks SMTP ports); SMTP works anywhere else (Brevo, Gmail, ...).
+    BREVO_API_KEY: optionalText,
+    SMTP_HOST: optionalText,
+    SMTP_PORT: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z.coerce
+        .number({ error: 'must be a port number, usually 587' })
+        .int()
+        .min(1)
+        .max(65535)
+        .default(587),
+    ),
+    /** true for port 465. Left empty, it is worked out from the port. */
+    SMTP_SECURE: z
+      .enum(['true', 'false', ''], { error: 'must be true, false or empty' })
+      .optional()
+      .transform((value) => (value ? value === 'true' : undefined)),
+    SMTP_USER: optionalText,
+    SMTP_PASS: optionalText,
+    MAIL_FROM: optionalText.refine(
+      (value) => value === undefined || MAIL_FROM_PATTERN.test(value),
+      'must be an email address, for example: Lepara Ale fele Moya <hello@example.org>',
+    ),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.DATABASE_SSL) {
@@ -77,6 +113,20 @@ const envSchema = z
         code: 'custom',
         path: ['DATABASE_SSL'],
         message: 'must be true in production',
+      });
+    }
+    if ((env.BREVO_API_KEY || env.SMTP_HOST) && !env.MAIL_FROM) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MAIL_FROM'],
+        message: 'is required for sending email (the sender people see on emails)',
+      });
+    }
+    if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [env.SMTP_USER ? 'SMTP_PASS' : 'SMTP_USER'],
+        message: 'is required: SMTP_USER and SMTP_PASS go together',
       });
     }
   });

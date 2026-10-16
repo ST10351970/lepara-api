@@ -1,0 +1,164 @@
+import type { EmailMessage } from './email';
+
+/**
+ * One function per email the API sends. Each returns the subject, a plain-text
+ * version and an HTML version (email apps show whichever they support).
+ *
+ * Safety rules for every template:
+ *  - Anything that came from a person or an admin is escaped in the HTML.
+ *  - Free text people typed (descriptions, messages) is never copied into an
+ *    email, so the forms can't be used to send someone else spam.
+ *  - Subjects contain only fixed words and reference numbers.
+ */
+
+export const ORGANISATION = 'Lepara Ale fele Moya';
+
+const ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ESCAPES[character] ?? character);
+}
+
+/** A line break or tab in a value would break the layout (or an email header). */
+const oneLine = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+type Block = { text: string; html: string };
+
+const paragraph = (text: string): Block => ({
+  text,
+  html: `<p style="margin:0 0 16px">${escapeHtml(text)}</p>`,
+});
+
+/** The reference number, large and easy to copy. */
+const referenceBox = (referenceNumber: string): Block => ({
+  text: `Your reference number: ${referenceNumber}`,
+  html:
+    '<p style="margin:0 0 4px;color:#555">Your reference number</p>' +
+    '<p style="margin:0 0 16px;font-size:24px;font-weight:bold;letter-spacing:2px;' +
+    `font-family:monospace">${escapeHtml(referenceNumber)}</p>`,
+});
+
+/** "Event: Community clothing drive" rows. */
+const details = (rows: Array<[string, string | null | undefined]>): Block => {
+  const shown = rows.filter((row): row is [string, string] => Boolean(row[1]));
+  return {
+    text: shown.map(([label, value]) => `${label}: ${oneLine(value)}`).join('\n'),
+    html:
+      '<table style="margin:0 0 16px;border-collapse:collapse">' +
+      shown
+        .map(
+          ([label, value]) =>
+            `<tr><td style="padding:2px 12px 2px 0;color:#555">${escapeHtml(label)}</td>` +
+            `<td style="padding:2px 0">${escapeHtml(oneLine(value))}</td></tr>`,
+        )
+        .join('') +
+      '</table>',
+  };
+};
+
+const SIGN_OFF = `Warm regards,\nThe ${ORGANISATION} team`;
+const NOT_YOU = "If you didn't fill in this form, you can ignore this email.";
+
+function build(to: string, subject: string, name: string, blocks: Block[]): EmailMessage {
+  const greeting = `Hi ${oneLine(name)},`;
+  const all = [paragraph(greeting), ...blocks];
+  const text = [...all.map((block) => block.text), SIGN_OFF, NOT_YOU].join('\n\n');
+  const html =
+    '<!doctype html><html><body style="margin:0;padding:24px;background:#f6f6f6">' +
+    '<div style="max-width:560px;margin:0 auto;padding:24px;background:#ffffff;' +
+    'font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a">' +
+    `<p style="margin:0 0 24px;font-weight:bold;font-size:18px">${ORGANISATION}</p>` +
+    all.map((block) => block.html).join('') +
+    `<p style="margin:24px 0 0">${escapeHtml(SIGN_OFF).replace('\n', '<br>')}</p>` +
+    `<p style="margin:24px 0 0;font-size:12px;color:#777">${escapeHtml(NOT_YOU)}</p>` +
+    '</div></body></html>';
+  return { to, subject: oneLine(subject), text, html };
+}
+
+const keepReference = (what: string): Block =>
+  paragraph(
+    'Please keep this reference number. With the last 4 digits of your phone number, ' +
+      `you can use it to check on your ${what}.`,
+  );
+
+// --- The emails ------------------------------------------------------------------------
+
+export function volunteerApplicationReceived(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  eventTitle: string;
+  eventDate: string;
+  eventTime: string | null;
+  location: string | null;
+  taskName: string | null;
+}): EmailMessage {
+  return build(data.to, `Volunteer application received: ${data.referenceNumber}`, data.name, [
+    paragraph(`Thank you for offering to volunteer with ${ORGANISATION}.`),
+    referenceBox(data.referenceNumber),
+    details([
+      ['Event', data.eventTitle],
+      ['Date', data.eventDate],
+      ['Time', data.eventTime],
+      ['Place', data.location],
+      ['Task', data.taskName],
+    ]),
+    paragraph('Our team will review your application and contact you to confirm your task.'),
+    keepReference('application'),
+  ]);
+}
+
+export function donationPledgeReceived(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  category: string;
+  eventTitle: string | null;
+}): EmailMessage {
+  return build(data.to, `Donation pledge received: ${data.referenceNumber}`, data.name, [
+    paragraph(`Thank you for offering a donation to ${ORGANISATION}.`),
+    referenceBox(data.referenceNumber),
+    details([
+      ['Donation type', data.category],
+      ['For', data.eventTitle],
+    ]),
+    paragraph(
+      'Our team will contact you to arrange the next steps. ' +
+        'No payment is collected through this form.',
+    ),
+    keepReference('pledge'),
+  ]);
+}
+
+export function assistanceRequestReceived(data: {
+  to: string;
+  name: string;
+  referenceNumber: string;
+  requestType: string;
+}): EmailMessage {
+  return build(data.to, `Request received: ${data.referenceNumber}`, data.name, [
+    paragraph(`We have received your request for help from ${ORGANISATION}.`),
+    referenceBox(data.referenceNumber),
+    details([['Help with', data.requestType]]),
+    paragraph('Our team will review your request and contact you about the next steps.'),
+    keepReference('request'),
+  ]);
+}
+
+export function enquiryReceived(data: {
+  to: string;
+  name: string;
+  enquiryType: 'Donor' | 'Partner';
+}): EmailMessage {
+  const about = data.enquiryType === 'Partner' ? 'partnering with us' : 'donating';
+  return build(data.to, 'We have received your enquiry', data.name, [
+    paragraph(`Thank you for your enquiry about ${about}.`),
+    paragraph('Our team will reply to this email address as soon as we can.'),
+  ]);
+}

@@ -76,6 +76,31 @@ describe('loadEnv', () => {
     );
   });
 
+  it('treats email as optional and checks its settings', () => {
+    const plain = loadEnv({ ...minimal, SMTP_HOST: '', SMTP_PORT: '', MAIL_FROM: ' ' });
+    expect(plain.SMTP_HOST).toBeUndefined();
+    expect(plain.BREVO_API_KEY).toBeUndefined();
+    expect(plain.SMTP_PORT).toBe(587);
+    expect(plain.SMTP_SECURE).toBeUndefined();
+
+    const gmail = loadEnv({
+      ...minimal,
+      SMTP_HOST: 'smtp.gmail.com',
+      SMTP_PORT: '465',
+      SMTP_USER: 'lepara@gmail.com',
+      SMTP_PASS: 'app-password',
+      MAIL_FROM: 'Lepara Ale fele Moya <lepara@gmail.com>',
+    });
+    expect(gmail.SMTP_PORT).toBe(465);
+    expect(gmail.MAIL_FROM).toBe('Lepara Ale fele Moya <lepara@gmail.com>');
+
+    expect(() => loadEnv({ ...minimal, SMTP_HOST: 'smtp.gmail.com' })).toThrow(/MAIL_FROM/);
+    expect(() => loadEnv({ ...minimal, BREVO_API_KEY: 'xkeysib-test' })).toThrow(/MAIL_FROM/);
+    expect(() => loadEnv({ ...minimal, SMTP_USER: 'someone' })).toThrow(/SMTP_PASS/);
+    expect(() => loadEnv({ ...minimal, MAIL_FROM: 'not an address' })).toThrow(/MAIL_FROM/);
+    expect(() => loadEnv({ ...minimal, SMTP_SECURE: 'yes' })).toThrow(/SMTP_SECURE/);
+  });
+
   it('insists on SSL to the database in production', () => {
     expect(() => loadEnv({ ...minimal, NODE_ENV: 'production' })).toThrow(
       /must be true in production/,

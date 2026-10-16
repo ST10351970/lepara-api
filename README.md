@@ -10,6 +10,7 @@ Built so far, following the build guide:
 - **Phase 2, Step 7:** events: the public event list and pages for the app, event types, volunteer tasks, and photo uploads to Azure Blob Storage.
 - **Phase 2, Step 8:** announcements for the app's News screen.
 - **Phase 2, Step 9:** the shop: products, sizes with stock, categories and product photos.
+- **Phase 3, Step 10:** the four public forms (volunteer, donation pledge, request help, enquiry), with reference numbers and confirmation emails.
 
 ## Requirements
 
@@ -215,6 +216,60 @@ Rules:
 - **Prices** must be more than R0. Every price and stock change is recorded in the audit log with the old and new value.
 - **Search** is safe to use with any text: a search for `'; DROP TABLE product; --` simply finds nothing.
 
+## Public forms (volunteer, give, request help, enquiry)
+
+No sign-in. Each form replies `201` with:
+
+```json
+{ "success": true, "data": { "referenceNumber": "VOL-7K3P9X", "status": "Submitted", "submittedAt": "2026-10-16T08:30:00.000Z", "message": "Thank you. ..." } }
+```
+
+Show `referenceNumber` big and clear: people use it later, with the last 4 digits of their phone number, to check progress. `message` is a ready-made thank-you line. If an email address was given, the same reference number is emailed.
+
+| Request | Body | Reference |
+| --- | --- | --- |
+| `POST /volunteer-applications` | `{ initiativeId, taskId, fullName, phone, email?, contribution, availability, consent }` | `VOL-…` |
+| `POST /donation-pledges` | `{ fullName, email, phone, initiativeId?, category, description, estimatedValue?, consent }` | `PLG-…` |
+| `POST /assistance-requests` | `{ fullName, phone, email?, requestType, description, consent }` | `REQ-…` |
+| `POST /enquiries` | `{ fullName, email, phone?, enquiryType, message, consent }` | none (`null`) |
+| `GET /form-options` | | The choices for `category`, `requestType` and `enquiryType`, each as `{ value, label }` |
+
+- **`consent`** must be `true` (the ticked POPIA box). Anything else gets `400` on the `consent` field.
+- **Phone numbers:** South African, written any common way (`071 234 5678`, `+27 71 234 5678`). They are stored as `+27712345678`.
+- **Optional fields** can be left out, or sent as `""` or `null`.
+- **`description`, `contribution` and `message`:** 10 to 1,000 characters. **`availability`:** 3 to 200 characters, e.g. `"24 Oct, 10:00–14:00"`.
+- **Volunteers:** the event must be published, not over (Johannesburg date), and looking for volunteers. `taskId` must be one of that event's tasks (from `GET /initiatives/:id/tasks`). One phone number can have only one application waiting for review per event; a second one gets `409` on the `phone` field.
+- **Pledges:** `category` is `Goods`, `Monetary`, `School supplies` or `Food and essentials`. `estimatedValue` is in rands, from 0 to 1,000,000: send a number (`1200` or `"1200.50"`), not text such as `"R1,200 (estimated)"`. Leave out `initiativeId` for a general donation; if given, the event must be open. No payment is taken.
+- **Request help:** `requestType` is `Clothing`, `Blankets`, `Sanitary products`, `Food`, `School supplies` or `Other`. To change the list, edit `src/modules/submissions/submissions.options.ts`; no database change is needed.
+- **Enquiries:** `enquiryType` is `Donor` or `Partner`. Task 1's `ENQUIRY` table has no reference number, so the reply's `referenceNumber` is `null`.
+- **A draft, closed or finished event** gets `400` on the `initiativeId` field with a plain message, so the app can show it under the event picker.
+- **Spam protection:** each IP address can send 5 forms per 10 minutes (then `429`). The website should also add a hidden spam-trap field called `website`; people never see it, but simple bots fill it in, and the API then replies with a pretend success and saves nothing:
+  ```html
+  <input name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true"
+         style="position:absolute;left:-9999px" />
+  ```
+  Don't use `display:none` (some bots skip those), and don't let the browser autofill it. The mobile app doesn't need the field.
+
+### Setting up email
+
+Emails go out **after** the reply, so a slow or broken mail service never delays or fails a form. A failed email is tried 3 times, then logged. The API picks the first of these that is set up:
+
+1. **`BREVO_API_KEY`: Brevo's web API.** Use this for the live API. **Render's free plan blocks the usual email (SMTP) ports** since September 2025, so SMTP can't work there, but Brevo's API uses HTTPS like any web request.
+2. **`SMTP_HOST`: any SMTP service.** Fine on your own machine or on paid hosting.
+3. **Neither, on your own machine (`npm run dev`):** emails go to a free test inbox at [ethereal.email](https://ethereal.email). Nobody receives them; the terminal shows a `preview` link to read each one.
+4. **Neither, on the live server:** forms still work; the log notes that no email was sent.
+
+**Brevo (free, 300 emails a day):**
+
+1. Sign up at brevo.com.
+2. Add the sender address: **Settings → Senders, Domains & Dedicated IPs → Senders → Add a sender**, then click the link Brevo emails to it (any inbox you can open will do). Put it in `MAIL_FROM` as `Lepara Ale fele Moya <that address>`.
+3. Make an API key: open the menu under your account name (top right), then **SMTP & API → API Keys → Generate a new API key**. It starts with `xkeysib-`. Put it in `BREVO_API_KEY`.
+4. Render's outgoing address can change, so check **Settings → Security → Authorized IPs**: if blocking is **Activated** for API keys, choose **Deactivate for API**. Otherwise Brevo answers `401 ... unrecognised IP address` and the log shows "Email was refused".
+
+**Gmail, for testing on your own machine:** turn on 2-Step Verification for the Google account, create an **app password** at myaccount.google.com/apppasswords, then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER` (the Gmail address), `SMTP_PASS` (the 16-letter app password, without spaces) and `MAIL_FROM` (the same Gmail address).
+
+The API key and the app password are passwords: never commit them or share them.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -264,6 +319,11 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 8: hidden announcements never appear publicly; the public list is newest first and paginated | `tests/integration/announcements.test.ts` |
 | Step 9: inactive products are hidden from the public; a search for `'; DROP TABLE product; --` returns an empty list | `tests/integration/products.test.ts` |
 | Step 9: stock shows as In stock, Low stock or Sold out; sizes and SKU codes are unique | `tests/integration/products.test.ts`, `tests/unit/products.test.ts` |
+| Step 10: each form returns a reference number and emails it; a draft or ended event gets a friendly refusal; the 6th form in 10 minutes gets 429; an unticked consent box gets 400 on `consent` | `tests/integration/submissions.test.ts`, `tests/unit/submissions.test.ts` |
+| Step 10: a filled-in spam-trap field gets a pretend success and saves nothing | `tests/integration/submissions.test.ts`, `tests/unit/submissions.test.ts` |
+| Step 10: an unreachable mail server is retried 3 times, then logged; the form is saved and answered straight away | `tests/unit/email.test.ts` (and by hand, below) |
+
+To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
 To check by hand that the app user cannot drop a table, connect as `lepara_app` and run `DROP TABLE donation;`. It should fail with "must be owner of table donation".
 
@@ -273,7 +333,7 @@ To check by hand that the app user cannot drop a table, connect as `lepara_app` 
 - **Build command:** `npm ci --include=dev && npm run build && npm prune --omit=dev` (TypeScript is a dev dependency, so it must be installed to build)
 - **Start command:** `npm start`
 - **Health check path:** `/api/v1/health`
-- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`. The host sets `PORT`.
+- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`, and for email `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan SMTP is blocked, so use Brevo's API there). The host sets `PORT`.
 - **Never change `TOTP_ENCRYPTION_KEY` on the live server** once admins have set up 2FA: their authenticator apps would stop working and each would need 2FA reset.
 
 Run `npm run migrate:up` from your own machine, with `MIGRATION_DATABASE_URL` pointing at the cloud database, before deploying code that needs new tables.
@@ -287,8 +347,9 @@ src/
   routes.ts              mounts each module under /api/v1
   config/                environment check, database pool and transactions
   middleware/            validation, error handler, not-found, rate limits, admin sign-in check, roles,
-                         photo uploads
-  services/              connections to outside services (photo storage in Azure; push notifications from step 17)
+                         photo uploads, the forms' spam trap
+  services/              connections to outside services (photo storage in Azure, email and its templates;
+                         push notifications from step 17)
   modules/<feature>/     routes → controller → service → repository (Task 1, Section 6.2)
   schemas/common.ts      shared validation rules with user-facing messages
   utils/                 errors, money in cents, dates, paging, reference numbers, safe sorting,

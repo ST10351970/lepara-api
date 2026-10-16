@@ -61,6 +61,24 @@ export async function withTransaction<T>(
   }
 }
 
+/**
+ * Inside a transaction: runs `work` so that if it fails, only its own changes
+ * are undone and the transaction can carry on (normally one failed statement
+ * spoils the whole transaction). Used to retry an insert with a new
+ * reference number after a clash.
+ */
+export async function withSavepoint<T>(client: Queryable, work: () => Promise<T>): Promise<T> {
+  await client.query('SAVEPOINT attempt');
+  try {
+    const result = await work();
+    await client.query('RELEASE SAVEPOINT attempt');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK TO SAVEPOINT attempt').catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function closePool(): Promise<void> {
   await pool.end();
 }

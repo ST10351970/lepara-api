@@ -20,6 +20,13 @@ import {
   productCategoriesRouter,
   productsRouter,
 } from './modules/products/products.routes';
+import {
+  assistanceRequestsRouter,
+  donationPledgesRouter,
+  enquiriesRouter,
+  formOptionsRouter,
+  volunteerApplicationsRouter,
+} from './modules/submissions/submissions.routes';
 
 /** Everything under /api/v1. Each later step mounts its module here. */
 export const apiRouter = Router();
@@ -33,6 +40,13 @@ apiRouter.use('/initiative-types', initiativeTypesRouter);
 apiRouter.use('/announcements', announcementsRouter);
 apiRouter.use('/products', productsRouter);
 apiRouter.use('/product-categories', productCategoriesRouter);
+
+// The public forms (5 per IP address per 10 minutes) and their pickers.
+apiRouter.use('/form-options', formOptionsRouter);
+apiRouter.use('/volunteer-applications', volunteerApplicationsRouter);
+apiRouter.use('/donation-pledges', donationPledgesRouter);
+apiRouter.use('/assistance-requests', assistanceRequestsRouter);
+apiRouter.use('/enquiries', enquiriesRouter);
 
 // --- Admin (website only) ------------------------------------------------------
 
