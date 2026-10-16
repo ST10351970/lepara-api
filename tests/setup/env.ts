@@ -8,6 +8,7 @@ process.env.CORS_ORIGINS = 'https://website.test';
 // Fixed secrets for tests only. Never use these anywhere else.
 process.env.JWT_ADMIN_SECRET = 'test-only-admin-token-secret-not-for-real-use';
 process.env.TOTP_ENCRYPTION_KEY = '00112233445566778899aabbccddeeff'.repeat(2);
+process.env.JWT_CUSTOMER_SECRET = 'test-only-customer-token-secret-not-for-real-use';
 
 // Tests never send email, whatever .env says.
 process.env.BREVO_API_KEY = '';

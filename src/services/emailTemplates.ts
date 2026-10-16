@@ -299,3 +299,92 @@ export function donationPledgeReceivedThankYou(data: {
     ]),
   ]);
 }
+
+// --- Customer accounts (step 14) ----------------------------------------------------------
+
+/** The 6-digit code, large and easy to copy. */
+const codeBox = (code: string): Block => ({
+  text: `Your code: ${code}`,
+  html:
+    '<p style="margin:0 0 4px;color:#555">Your code</p>' +
+    '<p style="margin:0 0 16px;font-size:28px;font-weight:bold;letter-spacing:6px;' +
+    `font-family:monospace">${escapeHtml(code)}</p>`,
+});
+
+const codeExpiry = paragraph(
+  'The code works for 10 minutes. Never share it: our team will never ask you for it.',
+);
+
+export function customerSignUpCode(data: { to: string; name: string; code: string }) {
+  return build(data.to, `Confirm your email for ${ORGANISATION}`, data.name, [
+    paragraph('Welcome! Enter this code in the app to confirm your email address.'),
+    codeBox(data.code),
+    codeExpiry,
+  ]);
+}
+
+export function customerAlreadyRegistered(data: { to: string; name: string }) {
+  return build(data.to, `You already have an account with ${ORGANISATION}`, data.name, [
+    paragraph(
+      'Someone tried to create a new account with this email address, but you already have one.',
+    ),
+    paragraph(
+      'Please sign in instead. If you have forgotten your password, choose "Forgot password" ' +
+        'on the sign-in screen.',
+    ),
+  ]);
+}
+
+export function customerLoginCode(data: { to: string; name: string; code: string }) {
+  return build(data.to, `Your sign-in code for ${ORGANISATION}`, data.name, [
+    paragraph('Enter this code in the app to finish signing in.'),
+    codeBox(data.code),
+    codeExpiry,
+    paragraph("If you didn't just try to sign in, change your password straight away."),
+  ]);
+}
+
+export function customerPasswordResetCode(data: { to: string; name: string; code: string }) {
+  return build(data.to, `Reset your ${ORGANISATION} password`, data.name, [
+    paragraph('Enter this code in the app to choose a new password.'),
+    codeBox(data.code),
+    codeExpiry,
+  ]);
+}
+
+export function customerEmailChangeCode(data: { to: string; name: string; code: string }) {
+  return build(data.to, `Confirm your new email for ${ORGANISATION}`, data.name, [
+    paragraph('Enter this code in the app to start using this email address for your account.'),
+    codeBox(data.code),
+    codeExpiry,
+  ]);
+}
+
+export function customerEmailAlreadyUsed(data: { to: string; name: string }) {
+  return build(data.to, 'Someone asked to use your email address', data.name, [
+    paragraph(
+      'Someone asked to move another account to this email address, but it already belongs ' +
+        'to your account. Nothing has changed.',
+    ),
+  ]);
+}
+
+export function customerPasswordChanged(data: { to: string; name: string }) {
+  return build(data.to, `Your ${ORGANISATION} password was changed`, data.name, [
+    paragraph('Your password was just changed, and you have been signed out on other devices.'),
+    paragraph(
+      "If this wasn't you, reset your password straight away with \"Forgot password\" " +
+        'on the sign-in screen.',
+    ),
+  ]);
+}
+
+export function customerAccountDeleted(data: { to: string; name: string }) {
+  return build(data.to, `Your ${ORGANISATION} account was deleted`, data.name, [
+    paragraph(
+      'Your account has been deleted and your personal details removed from it. Past orders, ' +
+        'with the delivery details given for them, are kept for our financial records.',
+    ),
+    paragraph('Thank you for supporting us. You are welcome to create a new account at any time.'),
+  ]);
+}

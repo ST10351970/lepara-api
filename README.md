@@ -14,6 +14,7 @@ Built so far, following the build guide:
 - **Phase 3, Step 11:** "Track my request": the status of a volunteer application, pledge or request for help, from its reference number and phone digits.
 - **Phase 3, Step 12:** the admin review queues: accept or decline volunteers, requests for help and pledges (with a decision email), record attendance, close requests, mark enquiries reviewed.
 - **Phase 3, Step 13:** donations and stock: recording and voiding donations, stock items and adjustments, receiving pledges, and fulfilling requests from stock.
+- **Phase 4, Step 14:** customer accounts for the shop: sign-up with an emailed code, sign-in (with optional emailed login codes), sessions, profile, password change and reset, and account deletion.
 
 ## Requirements
 
@@ -38,7 +39,7 @@ On Neon: create a project, then under **Databases** add `lepara_dev` and `lepara
 - `MIGRATION_DATABASE_URL` and, for now, `DATABASE_URL`: the `lepara_dev` string.
 - `TEST_DATABASE_URL`: the `lepara_test` string.
 - `SEED_ADMIN_*`: the first admin account for signing in to the API. If the password contains `#`, wrap it in double quotes.
-- `JWT_ADMIN_SECRET` and `TOTP_ENCRYPTION_KEY`: make each one with the command shown above it in `.env.example`, and paste the output. Use different values on your machine and on the live server.
+- `JWT_ADMIN_SECRET`, `JWT_CUSTOMER_SECRET` and `TOTP_ENCRYPTION_KEY`: make each one with the command shown above it in `.env.example`, and paste the output. Use different values on your machine and on the live server.
 
 **3. Create the tables**
 
@@ -355,6 +356,46 @@ Staff and super admins. Every change here runs in one transaction that locks the
 
 **Voiding** needs a reason. If some of the donated goods have already been given out, taking them back would push stock below zero, so the reply is `409` saying so. Fix the stock with an adjustment instead. Voiding a donation that came from a pledge leaves the pledge Received.
 
+## Customer accounts (the app's Account tab)
+
+For shop customers. Admins sign in separately (above); a customer token never works on `/admin` routes, and an admin token never works here.
+
+| Request | Body | Reply (`data`) |
+| --- | --- | --- |
+| `POST /auth/register` | `{ firstName, lastName, email, mobile, password, confirmPassword, acceptTerms: true }` | `201 { email, message }`. A 6-digit code is emailed |
+| `POST /auth/verify-email` | `{ email, code }` | A session (below): the customer is signed in |
+| `POST /auth/resend-code` | `{ email }` for a new sign-up code, or `{ pendingToken }` for a new login code | `{ message }`, or `429` within 60 seconds of the last code |
+| `POST /auth/login` | `{ email, password }` | A session, or `{ twoFactorRequired: true, pendingToken, expiresIn }` when login codes are on |
+| `POST /auth/login/verify` | `{ pendingToken, code }` | A session |
+| `POST /auth/refresh` | `{ refreshToken }` (app) or nothing (website, uses the cookie) | A new session; the old refresh token stops working |
+| `POST /auth/logout` | `{ refreshToken }` (app) or nothing (website) | `{ signedOut: true }` |
+| `POST /auth/forgot-password` | `{ email }` | `{ message }`, the same whether or not the email has an account |
+| `POST /auth/reset-password` | `{ email, code, newPassword, confirmPassword }` | `{ passwordReset: true }`. Every device is signed out; sign in with the new password |
+| `GET /me` | | The profile |
+| `PATCH /me` | `{ firstName?, lastName?, mobile?, email? }` | The profile. A new `email` shows as `pendingEmail` until its code is entered |
+| `POST /me/email/verify` | `{ code }` (sent to the new address) | The profile, with the new email |
+| `PATCH /me/password` | `{ currentPassword, newPassword, confirmPassword }` | A new session. Other devices are signed out |
+| `PATCH /me/two-factor` | `{ enabled, password }` | The profile. When on, each sign-in also needs a code from email |
+| `DELETE /me` | `{ password }` | `{ deleted: true }`. Personal details are removed and every device signed out; past orders are kept for the records |
+
+A **session** is `{ accessToken, tokenType: "Bearer", expiresIn: 900, customer }`, plus `refreshToken` and `refreshExpiresAt` for the app. The **profile** (`customer`) has `customerId`, `firstName`, `lastName`, `email`, `mobile`, `twoFactorEnabled`, `pendingEmail`, `lastLoginAt` and `createdAt`.
+
+How the app and the website should use it:
+
+- **Send the access token** as `Authorization: Bearer <accessToken>` on `/me` (and orders, from step 15). It lasts 15 minutes; on `TOKEN_EXPIRED`, refresh and try again.
+- **The mobile app** gets the refresh token in the reply. Keep it in secure storage (`expo-secure-store`), never in AsyncStorage, and send it to `/auth/refresh` and `/auth/logout` as `{ "refreshToken": "..." }`. It lasts 7 days and is replaced on every refresh, so always save the new one.
+- **The website** never sees the refresh token: it's in an httpOnly cookie. Call `/auth/*` with `fetch(url, { credentials: 'include' })`. (The API tells them apart by the `Origin` header, which browsers always send and the app doesn't.)
+- **Error codes:** `EMAIL_NOT_VERIFIED` (403, right password but the email isn't confirmed: show the code screen and offer "resend"), `ACCOUNT_LOCKED` (423), `RATE_LIMITED` (429), `VALIDATION_ERROR` (show `fields`; wrong codes are on the `code` field).
+
+Security rules built in:
+
+- **Codes** are 6 random digits, stored only as a keyed hash, valid for 10 minutes, with 5 tries each. A new code cancels the older ones. At most one code a minute and 5 an hour per email address.
+- **Nobody can find out who has an account:** registering an email that already has one gets the same reply (the email itself tells the owner to sign in), and so do "resend" and "forgot password". Sign-in only says the email isn't confirmed after the right password.
+- **Five wrong passwords or login codes** in a row lock the account for 15 minutes.
+- **Refresh tokens** are stored only as hashes and replaced on every use. If an old one comes back, someone copied it, so every session that customer has is ended.
+- **Changing or resetting the password** signs out every other device straight away (their access tokens stop working too), and the customer gets an email about it.
+- **A new email address** only replaces the old one after the code sent to it is entered.
+
 ## Managing admins (super admins only)
 
 Staff admins get `403 FORBIDDEN` on all of these.
@@ -414,6 +455,9 @@ Each admin in a reply has `adminId`, `username`, `fullName`, `email`, `role`, `i
 | Step 13: a goods donation raises stock by exactly its quantity, and a forced error halfway saves nothing; a monetary donation with a quantity is rejected | `tests/integration/stock.test.ts`, `tests/unit/stock.test.ts` |
 | Step 13: two fulfilments at once for the last 5 blankets: one succeeds, the other gets 409; voiding after the goods were given out gets 409 | `tests/integration/stock.test.ts` |
 | Step 13: each item's movements add up to its quantity on hand | `tests/integration/stock.test.ts` |
+| Step 14: register, the code arrives, verify, signed in; registering an existing email gets the same reply as a new one | `tests/integration/customerAuth.test.ts` |
+| Step 14: five wrong codes end that code; a resend within 60 seconds gets 429; signing in unverified gets `EMAIL_NOT_VERIFIED` | `tests/integration/customerAuth.test.ts`, `tests/unit/customerAuth.test.ts` |
+| Step 14: changing the password signs out other devices; a customer token on an `/admin` route gets 401 | `tests/integration/customerAuth.test.ts`, `tests/unit/customerAuth.test.ts` |
 
 To check by hand that a form still saves when email is down, put `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` and any `MAIL_FROM` in `.env`, run `npm run dev` and send a form. The reply comes at once with a reference number; about 7 seconds later the terminal shows two "trying again" warnings and then "Email could not be sent after 3 tries". Remove those lines afterwards.
 
@@ -425,7 +469,7 @@ To check by hand that the app user cannot drop a table, connect as `lepara_app` 
 - **Build command:** `npm ci --include=dev && npm run build && npm prune --omit=dev` (TypeScript is a dev dependency, so it must be installed to build)
 - **Start command:** `npm start`
 - **Health check path:** `/api/v1/health`
-- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`, and for email `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan SMTP is blocked, so use Brevo's API there). The host sets `PORT`.
+- **Environment variables:** `NODE_ENV=production`, `DATABASE_URL` (the `lepara_app` user), `DATABASE_SSL=true`, `TRUST_PROXY=1`, `CORS_ORIGINS` (the website's address), `LOG_LEVEL=info`, `JWT_ADMIN_SECRET`, `JWT_CUSTOMER_SECRET` (a different value), `TOTP_ENCRYPTION_KEY`, `AZURE_STORAGE_CONNECTION_STRING`, and for email `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan SMTP is blocked, so use Brevo's API there). The host sets `PORT`.
 - **Never change `TOTP_ENCRYPTION_KEY` on the live server** once admins have set up 2FA: their authenticator apps would stop working and each would need 2FA reset.
 
 Run `npm run migrate:up` from your own machine, with `MIGRATION_DATABASE_URL` pointing at the cloud database, before deploying code that needs new tables.
@@ -482,3 +526,4 @@ Migration `001` creates the ten Task 1 tables exactly as Section 8 designs them.
 | 005 | `ADMIN_USER`: session version, last authenticator code used; `REFRESH_TOKEN`: revoke reason | Ending all sessions at once, codes that work only once, detecting a copied refresh token |
 | 006 | `ADMIN_USER`: one account per email address; two more revoke reasons (2FA reset, password reset) | Admin management |
 | 007 | `VOLUNTEER_APPLICATION`: decision reason; a declined application, request or pledge must have a reason | Task 1 requires a reason to decline (Section 7.6); the decision email includes it |
+| 008 | `CUSTOMER`: session version, last sign-in | Signing a customer out everywhere at once (password change, reset, deletion) |

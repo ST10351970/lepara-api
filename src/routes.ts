@@ -7,6 +7,7 @@ import {
   announcementsRouter,
 } from './modules/announcements/announcements.routes';
 import { adminUsersRouter } from './modules/adminUsers/adminUsers.routes';
+import { customerAuthRouter, customerMeRouter } from './modules/customerAuth/customerAuth.routes';
 import {
   adminDonationsRouter,
   adminPledgeReceiptRouter,
@@ -66,6 +67,11 @@ apiRouter.use('/enquiries', enquiriesRouter);
 
 // Track my request: reference number + last 4 phone digits (5 wrong tries per 15 minutes).
 apiRouter.use('/track', trackingRouter);
+
+// --- Customers (the app's Account tab and the shop) ------------------------------
+
+apiRouter.use('/auth', customerAuthRouter);
+apiRouter.use('/me', customerMeRouter);
 
 // --- Admin (website only) ------------------------------------------------------
 

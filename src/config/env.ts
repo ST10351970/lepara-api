@@ -63,6 +63,11 @@ const envSchema = z
       .string({ error: 'is required: 64 hex characters (see .env.example)' })
       .regex(/^[0-9a-fA-F]{64}$/, 'must be exactly 64 hex characters (see .env.example)'),
 
+    // Customer sign-in (the shop accounts). A different value from JWT_ADMIN_SECRET.
+    JWT_CUSTOMER_SECRET: z
+      .string({ error: 'is required: a long random value (see .env.example)' })
+      .min(32, 'must be at least 32 characters (see .env.example)'),
+
     // Photo uploads (Azure Blob Storage). Optional: without them, uploads answer 503.
     AZURE_STORAGE_CONNECTION_STRING: z
       .string()
@@ -120,6 +125,13 @@ const envSchema = z
         code: 'custom',
         path: ['MAIL_FROM'],
         message: 'is required for sending email (the sender people see on emails)',
+      });
+    }
+    if (env.JWT_CUSTOMER_SECRET === env.JWT_ADMIN_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['JWT_CUSTOMER_SECRET'],
+        message: 'must be different from JWT_ADMIN_SECRET',
       });
     }
     if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {

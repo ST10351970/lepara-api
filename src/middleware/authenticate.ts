@@ -1,6 +1,10 @@
 import type { RequestHandler, Response } from 'express';
 import { findAdminSession, type AdminRole } from '../modules/adminAuth/adminAuth.repository';
 import { readAccessToken } from '../modules/adminAuth/adminAuth.tokens';
+import { findCustomerSession } from '../modules/customerAuth/customerAuth.repository';
+import {
+  readAccessToken as readCustomerAccessToken,
+} from '../modules/customerAuth/customerAuth.tokens';
 import { AppError, ErrorCode, errors } from '../utils/AppError';
 
 /**
@@ -8,7 +12,7 @@ import { AppError, ErrorCode, errors } from '../utils/AppError';
  * Besides checking the token's signature and expiry, the admin is looked up,
  * so a deactivated admin or an ended session (password changed, signed out
  * everywhere) is refused straight away rather than when the token expires.
- * The customer version is added with customer accounts in Phase 3.
+ * Customer routes use authenticateCustomer below, with their own tokens.
  */
 
 export type AdminPrincipal = {
@@ -61,3 +65,41 @@ export const requirePasswordChanged: RequestHandler = (_req, res, next) => {
   }
   next();
 };
+
+// --- Customers ------------------------------------------------------------------------------
+
+export type CustomerPrincipal = { customerId: number; email: string };
+
+/**
+ * Customer routes (/me, orders): the request must carry a customer access
+ * token. Admin tokens are signed with a different secret, so they never work
+ * here, and customer tokens never work on admin routes.
+ */
+export const authenticateCustomer: RequestHandler = async (req, res, next) => {
+  const match = BEARER_PATTERN.exec(req.headers.authorization ?? '');
+  if (!match) throw errors.unauthorized();
+
+  const claims = readCustomerAccessToken(match[1]!);
+  const customer = await findCustomerSession(claims.customerId);
+  if (
+    !customer ||
+    !customer.is_active ||
+    customer.deleted_at !== null ||
+    customer.session_version !== claims.sessionVersion
+  ) {
+    throw errors.unauthorized('Your session has ended. Please sign in again.');
+  }
+
+  res.locals.customer = {
+    customerId: customer.customer_id,
+    email: customer.email,
+  } satisfies CustomerPrincipal;
+  next();
+};
+
+/** The signed-in customer. Only call this on routes behind authenticateCustomer. */
+export function currentCustomer(res: Response): CustomerPrincipal {
+  const customer = res.locals.customer as CustomerPrincipal | undefined;
+  if (!customer) throw errors.unauthorized();
+  return customer;
+}

@@ -4,6 +4,7 @@ import { EnvError, loadEnv } from '../../src/config/env';
 const minimal = {
   DATABASE_URL: 'postgres://user:pass@localhost:5432/lepara_dev',
   JWT_ADMIN_SECRET: 'a'.repeat(32),
+  JWT_CUSTOMER_SECRET: 'c'.repeat(32),
   TOTP_ENCRYPTION_KEY: 'ab'.repeat(32),
 };
 
@@ -57,6 +58,12 @@ describe('loadEnv', () => {
       expect(problems).toContain('TOTP_ENCRYPTION_KEY');
     }
     expect(() => loadEnv({ ...minimal, JWT_ADMIN_SECRET: 'short' })).toThrow(/at least 32/);
+    expect(() => loadEnv({ ...minimal, JWT_CUSTOMER_SECRET: undefined })).toThrow(
+      /JWT_CUSTOMER_SECRET/,
+    );
+    expect(() => loadEnv({ ...minimal, JWT_CUSTOMER_SECRET: 'a'.repeat(32) })).toThrow(
+      /different from JWT_ADMIN_SECRET/,
+    );
     expect(() => loadEnv({ ...minimal, TOTP_ENCRYPTION_KEY: 'xyz'.repeat(20) })).toThrow(/64 hex/);
   });
 
